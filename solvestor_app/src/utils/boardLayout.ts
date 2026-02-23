@@ -47,6 +47,9 @@ export function computeBoardLayout(): TileLayout[] {
         let x = 0;
         let z = 0;
         let rotation = 0;
+        // 1 = header at local -Z (default), -1 = flip header to local +Z
+        // Left & right columns need flipping so headers always face the board center
+        let contentFlip: 1 | -1 = 1;
 
         if (i === 0) {
             // Bottom-right corner
@@ -70,6 +73,7 @@ export function computeBoardLayout(): TileLayout[] {
             x = -boardHalf;
             z = boardHalf - offset;
             rotation = Math.PI / 2;
+            contentFlip = -1;
         } else if (i === 20) {
             // Top-left corner
             x = -boardHalf;
@@ -92,12 +96,14 @@ export function computeBoardLayout(): TileLayout[] {
             x = boardHalf;
             z = -boardHalf + offset;
             rotation = -Math.PI / 2;
+            contentFlip = -1;
         }
 
         layouts.push({
             position: [x, 0, z],
             rotation,
             isCorner,
+            contentFlip,
         });
     }
 

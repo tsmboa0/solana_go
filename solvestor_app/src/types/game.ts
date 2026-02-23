@@ -82,4 +82,6 @@ export interface TileLayout {
     position: Vector3Tuple;
     rotation: number; // Y-axis rotation in radians
     isCorner: boolean;
+    /** 1 = default header at -Z edge, -1 = flip header to +Z edge (keeps headers facing board center) */
+    contentFlip: 1 | -1;
 }

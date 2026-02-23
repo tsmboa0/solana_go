@@ -5,7 +5,9 @@
 // Separate from UI overlays which render as standard React.
 // ============================================================
 
+import { Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
+import { Physics } from '@react-three/rapier';
 import { Board } from './Board';
 import { TileGroup } from './TileGroup';
 import { PlayerToken } from './PlayerToken';
@@ -50,7 +52,13 @@ export function GameScene() {
             {players.map((player, index) => (
                 <PlayerToken key={player.id} player={player} index={index} />
             ))}
-            <DiceScene />
+
+            {/* Rapier physics world — only dice live here */}
+            <Suspense>
+                <Physics gravity={[0, -9.81, 0]}>
+                    <DiceScene />
+                </Physics>
+            </Suspense>
 
             {/* Fog for depth atmosphere */}
             <fog

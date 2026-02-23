@@ -40,6 +40,9 @@ export function Tile({ tile, layout }: TileProps) {
     const width = layout.isCorner ? CORNER_TILE_SIZE : TILE_WIDTH;
     const depth = layout.isCorner ? CORNER_TILE_SIZE : TILE_DEPTH;
 
+    // Content Z-flip: 1 keeps header at -Z edge, -1 mirrors to +Z edge
+    const flip = layout.contentFlip;
+
     // Animate hover: gentle elevation only (no color flood)
     useFrame(() => {
         if (meshRef.current) {
@@ -76,7 +79,7 @@ export function Tile({ tile, layout }: TileProps) {
             position={[layout.position[0], 0, layout.position[2]]}
             rotation={[0, layout.rotation, 0]}
         >
-            {/* Tile body — NO emissive color flood on hover */}
+            {/* Tile body — content is parented here so it moves with hover elevation */}
             <RoundedBox
                 ref={meshRef}
                 args={[width, TILE_HEIGHT, depth]}
@@ -106,70 +109,72 @@ export function Tile({ tile, layout }: TileProps) {
                     emissive="#000000"
                     emissiveIntensity={0}
                 />
-            </RoundedBox>
 
-            {/* Color band on top edge */}
-            <mesh
-                position={[0, TILE_HEIGHT + 0.001, -depth / 2 + depth * 0.12]}
-                rotation={[-Math.PI / 2, 0, 0]}
-            >
-                <planeGeometry args={[width - 0.04, depth * 0.22]} />
-                <meshBasicMaterial color={tile.colorBand} />
-            </mesh>
+                {/* Color band — skip on corner tiles, flipped by contentFlip on regular tiles */}
+                {!layout.isCorner && (
+                    <mesh
+                        position={[0, TILE_HEIGHT / 2 + 0.001, flip * (-depth / 2 + depth * 0.12)]}
+                        rotation={[-Math.PI / 2, 0, 0]}
+                    >
+                        <planeGeometry args={[width - 0.04, depth * 0.22]} />
+                        <meshBasicMaterial color={tile.colorBand} />
+                    </mesh>
+                )}
 
-            {/* Hover highlight border — subtle colored outline instead of color flood */}
-            {hovered && (
-                <mesh
-                    position={[0, TILE_HEIGHT + 0.002, 0]}
-                    rotation={[-Math.PI / 2, 0, 0]}
-                >
-                    <planeGeometry args={[width + 0.02, depth + 0.02]} />
-                    <meshBasicMaterial
-                        color={tile.colorBand}
-                        transparent
-                        opacity={0.12}
-                    />
-                </mesh>
-            )}
+                {/* Hover highlight border — subtle colored outline */}
+                {hovered && (
+                    <mesh
+                        position={[0, TILE_HEIGHT / 2 + 0.002, 0]}
+                        rotation={[-Math.PI / 2, 0, 0]}
+                    >
+                        <planeGeometry args={[width + 0.02, depth + 0.02]} />
+                        <meshBasicMaterial
+                            color={tile.colorBand}
+                            transparent
+                            opacity={0.12}
+                        />
+                    </mesh>
+                )}
 
-            {/* Icon emoji */}
-            <Text
-                position={[0, TILE_HEIGHT + 0.01, -depth * 0.05]}
-                rotation={[-Math.PI / 2, 0, 0]}
-                fontSize={layout.isCorner ? 0.2 : 0.15}
-                anchorX="center"
-                anchorY="middle"
-            >
-                {tile.icon}
-            </Text>
-
-            {/* Label text */}
-            <Text
-                position={[0, TILE_HEIGHT + 0.01, depth * 0.2]}
-                rotation={[-Math.PI / 2, 0, 0]}
-                fontSize={layout.isCorner ? 0.09 : 0.06}
-                maxWidth={width - 0.08}
-                anchorX="center"
-                anchorY="middle"
-                color={isDark ? COLORS.textPrimary : COLORS.textDark}
-                textAlign="center"
-            >
-                {labelText}
-            </Text>
-
-            {/* Price text (for buyable tiles) */}
-            {tile.price !== null && (
+                {/* Icon emoji — diagonal on corners, flipped on regular tiles */}
                 <Text
-                    position={[0, TILE_HEIGHT + 0.01, depth * 0.33]}
-                    rotation={[-Math.PI / 2, 0, 0]}
-                    fontSize={0.045}
+                    position={[0, TILE_HEIGHT / 2 + 0.01, layout.isCorner ? -depth * 0.1 : flip * (-depth * 0.05)]}
+                    rotation={[-Math.PI / 2, 0, layout.isCorner ? Math.PI / 4 : 0]}
+                    fontSize={layout.isCorner ? 0.2 : 0.15}
                     anchorX="center"
                     anchorY="middle"
-                    color={COLORS.textSecondary}
                 >
-                    {`$${tile.price.toLocaleString()}`}
+                    {tile.icon}
                 </Text>
-            )}
+
+                {/* Label text — diagonal on corners, flipped on regular tiles */}
+                <Text
+                    position={[0, TILE_HEIGHT / 2 + 0.01, layout.isCorner ? depth * 0.15 : flip * (depth * 0.2)]}
+                    rotation={[-Math.PI / 2, 0, layout.isCorner ? Math.PI / 4 : 0]}
+                    fontSize={layout.isCorner ? 0.09 : 0.06}
+                    maxWidth={width - 0.08}
+                    anchorX="center"
+                    anchorY="middle"
+                    color={isDark ? COLORS.textPrimary : COLORS.textDark}
+                    textAlign="center"
+                >
+                    {labelText}
+                </Text>
+
+                {/* Price text (for buyable tiles) — flipped along with header */}
+                {tile.price !== null && (
+                    <Text
+                        position={[0, TILE_HEIGHT / 2 + 0.01, flip * (depth * 0.33)]}
+                        rotation={[-Math.PI / 2, 0, 0]}
+                        fontSize={0.045}
+                        anchorX="center"
+                        anchorY="middle"
+                        color={COLORS.textSecondary}
+                    >
+                        {`$${tile.price.toLocaleString()}`}
+                    </Text>
+                )}
+            </RoundedBox>
 
             {/* Ownership / hover glow ring around the tile */}
             <mesh

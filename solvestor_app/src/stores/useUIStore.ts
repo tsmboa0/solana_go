@@ -39,6 +39,10 @@ interface UIState {
     // --- Dice animation state (for UI button) ---
     isDiceAnimating: boolean;
     setDiceAnimating: (animating: boolean) => void;
+
+    // --- Dice settled signal (from physics engine) ---
+    isDiceSettled: boolean;
+    setDiceSettled: (settled: boolean) => void;
 }
 
 export const useUIStore = create<UIState>()((set) => ({
@@ -77,4 +81,8 @@ export const useUIStore = create<UIState>()((set) => ({
     // Dice animation
     isDiceAnimating: false,
     setDiceAnimating: (animating: boolean) => set({ isDiceAnimating: animating }),
+
+    // Dice settled signal
+    isDiceSettled: false,
+    setDiceSettled: (settled: boolean) => set({ isDiceSettled: settled }),
 }));

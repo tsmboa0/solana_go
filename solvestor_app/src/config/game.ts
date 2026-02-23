@@ -77,3 +77,21 @@ export const TOKEN_Y_OFFSET = 0.28; // Token sits on top of tile (TILE_HEIGHT + 
 
 /** Multiple tokens on same tile — offset spread */
 export const TOKEN_SAME_TILE_OFFSET = 0.12;
+
+/** Dice appearance */
+export const DICE_SIZE = 0.35;
+export const DICE_GAP = 0.5;
+export const DICE_DOT_RADIUS = 0.022;
+
+/** Dice physics (Rapier rigid body) */
+export const DICE_THROW_HEIGHT = 0.5;         // Start height for throw
+export const DICE_REST_HEIGHT = 0.18;         // Settled Y position (half-size + tiny lift)
+export const DICE_TILE_MARGIN = 0.25;          // How far inside the tile ring dice should land
+export const DICE_RESTITUTION = 0.2;          // Bounciness (0 = no bounce, 1 = full)
+export const DICE_FRICTION = 0.6;             // Surface friction
+export const DICE_IMPULSE_STRENGTH = 0.25;     // Base impulse for throwing (vel ≈ impulse/mass)
+export const DICE_UPWARD_IMPULSE_BASE = 0.1;  // Base upward impulse
+export const DICE_UPWARD_IMPULSE_VAR = 0.1;   // Random variable upward impulse
+export const DICE_LATERAL_IMPULSE = 0.01;     // Base lateral separation impulse
+export const DICE_TORQUE_STRENGTH = 0.04;     // Torque impulse for tumbling
+

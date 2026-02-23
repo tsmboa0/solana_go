@@ -123,20 +123,6 @@ export function PlayerToken({ player, index }: PlayerTokenProps) {
                 />
             </mesh>
 
-            {/* Active player glow ring — flat on the ground */}
-            {player.isActive && (
-                <mesh
-                    rotation={[-Math.PI / 2, 0, 0]}
-                    position={[0, -TOKEN_HEIGHT / 2 - TOKEN_RADIUS + 0.01, 0]}
-                >
-                    <ringGeometry args={[TOKEN_RADIUS * 1.5, TOKEN_RADIUS * 2.5, 32]} />
-                    <meshBasicMaterial
-                        color={player.color}
-                        transparent
-                        opacity={0.4}
-                    />
-                </mesh>
-            )}
         </group>
     );
 }
