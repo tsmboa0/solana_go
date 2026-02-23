@@ -25,6 +25,7 @@ import {
     CAMERA_START_TARGET,
     CAMERA_FOLLOW_OFFSET,
     CAMERA_FOLLOW_DISTANCE,
+    CAMERA_SIDE_OFFSET,
     CAMERA_LOOK_AHEAD_DISTANCE,
     CAMERA_ZOOM_OFFSET,
     CAMERA_MIN_DISTANCE,
@@ -49,6 +50,18 @@ const MAX_POLAR = Math.PI / CAMERA_MAX_POLAR_DIVISOR;
 const _tmpDir = new THREE.Vector3();
 const _tmpTilePos = new THREE.Vector3();
 const _tmpNextTilePos = new THREE.Vector3();
+const _tmpInward = new THREE.Vector3();
+
+/**
+ * Compute the inward direction from a tile toward the board center (XZ only, normalized).
+ */
+function getInwardDirection(tileX: number, tileZ: number): THREE.Vector3 {
+    // Board center is roughly at origin (0, 0, 0)
+    _tmpInward.set(-tileX, 0, -tileZ);
+    if (_tmpInward.lengthSq() < 0.0001) return _tmpInward.set(0, 0, -1);
+    _tmpInward.normalize();
+    return _tmpInward;
+}
 
 /**
  * Compute the travel direction for a tile (normalized XZ vector).
@@ -94,8 +107,8 @@ export function CameraController() {
     // Whether the camera is in auto-follow mode
     const isFollowing = useRef(false);
 
-    // Game start flag — stay at overview until first roll
-    const isGameStart = useRef(true);
+    // Tracks which players have completed their first turn
+    const playersWhoHavePlayed = useRef(new Set<number>());
 
     // Smoothly interpolated travel direction
     const smoothDirection = useRef(new THREE.Vector3(0, 0, -1));
@@ -143,12 +156,14 @@ export function CameraController() {
 
         const sd = smoothDirection.current;
 
-        // Position camera BEHIND the token (opposite of travel direction)
-        // The lerp in useFrame handles smooth transition from wherever the camera is
+        // Inward direction: from token toward board center
+        const inward = getInwardDirection(tilePos.x, tilePos.z);
+
+        // Position camera BEHIND + to the INWARD side of the token
         targetPosition.current.set(
-            tilePos.x - sd.x * CAMERA_FOLLOW_DISTANCE,
+            tilePos.x - sd.x * CAMERA_FOLLOW_DISTANCE + inward.x * CAMERA_SIDE_OFFSET,
             CAMERA_FOLLOW_OFFSET[1],
-            tilePos.z - sd.z * CAMERA_FOLLOW_DISTANCE
+            tilePos.z - sd.z * CAMERA_FOLLOW_DISTANCE + inward.z * CAMERA_SIDE_OFFSET
         );
 
         // Look AHEAD of the token in the travel direction
@@ -195,8 +210,18 @@ export function CameraController() {
     // ─── On turn start: move camera to current player's token ───
     useEffect(() => {
         if (phase === 'waiting') {
-            // On game start, keep the overview position
-            if (isGameStart.current) return;
+            // If this player hasn't had a turn yet, go to overview position
+            if (!playersWhoHavePlayed.current.has(currentPlayerIndex)) {
+                targetPosition.current.copy(OVERVIEW_POSITION);
+                targetLookAt.current.copy(BOARD_CENTER);
+                lerpSpeed.current = CAMERA_LERP_FACTOR;
+
+                if (controlsRef.current) {
+                    controlsRef.current.target.copy(BOARD_CENTER);
+                    controlsRef.current.update();
+                }
+                return;
+            }
 
             const player = players[currentPlayerIndex];
             if (!player) return;
@@ -205,12 +230,13 @@ export function CameraController() {
 
             const [tx, , tz] = layout.position;
 
-            // Compute follow position: behind the player's token in travel direction
+            // Compute follow position: behind + inward of the player's token
             const dir = getTravelDirection(player.position);
+            const inward = getInwardDirection(tx, tz);
             targetPosition.current.set(
-                tx - dir.x * CAMERA_FOLLOW_DISTANCE,
+                tx - dir.x * CAMERA_FOLLOW_DISTANCE + inward.x * CAMERA_SIDE_OFFSET,
                 CAMERA_FOLLOW_OFFSET[1],
-                tz - dir.z * CAMERA_FOLLOW_DISTANCE
+                tz - dir.z * CAMERA_FOLLOW_DISTANCE + inward.z * CAMERA_SIDE_OFFSET
             );
 
             // Look ahead of the token
@@ -231,8 +257,8 @@ export function CameraController() {
                 controlsRef.current.update();
             }
         } else {
-            // First time leaving waiting = game has started
-            isGameStart.current = false;
+            // Mark current player as having played when they leave waiting
+            playersWhoHavePlayed.current.add(currentPlayerIndex);
         }
     }, [phase, currentPlayerIndex, players]);
 

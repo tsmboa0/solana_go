@@ -41,6 +41,9 @@ export const CAMERA_FOLLOW_OFFSET: [number, number, number] = [1.5, 4.39, 2.2];
 /** Follow mode — distance behind the token in the travel direction */
 export const CAMERA_FOLLOW_DISTANCE = 3.5;
 
+/** Follow mode — lateral offset toward board center (inward) */
+export const CAMERA_SIDE_OFFSET = 2.0;
+
 /** How far ahead of the token the lookAt point should be (in travel direction) */
 export const CAMERA_LOOK_AHEAD_DISTANCE = 1.2;
 
