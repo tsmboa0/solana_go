@@ -8,7 +8,7 @@
 // tends to land up.
 // ============================================================
 
-import { useRef, useEffect, useMemo } from 'react';
+import { useRef, useEffect, useMemo, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { RoundedBox } from '@react-three/drei';
 import {
@@ -25,6 +25,7 @@ import {
     DICE_GAP,
     DICE_DOT_RADIUS,
     DICE_THROW_HEIGHT,
+    DICE_REST_HEIGHT,
     DICE_TILE_MARGIN,
     DICE_RESTITUTION,
     DICE_FRICTION,
@@ -34,6 +35,7 @@ import {
     DICE_LATERAL_IMPULSE,
     DICE_TORQUE_STRENGTH,
 } from '@/config/game';
+import { MATERIALS } from '@/config/theme';
 
 // ─── Dot layout positions for each face value ──────────────
 const DOT_PATTERNS: Record<number, [number, number][]> = {
@@ -112,7 +114,7 @@ function DotFace({ value, position, rotation }: {
             {dots.map((dot, i) => (
                 <mesh key={i} position={[dot[0] * half * 0.8, dot[1] * half * 0.8, 0.001]}>
                     <circleGeometry args={[DICE_DOT_RADIUS, 16]} />
-                    <meshBasicMaterial color="#1a1a2e" />
+                    <meshBasicMaterial color={MATERIALS.dice.dotColor} />
                 </mesh>
             ))}
         </group>
@@ -175,9 +177,43 @@ function isBodySettled(rb: RapierRigidBody): boolean {
     return linSpeed < 0.08 && angSpeed < 0.15;
 }
 
+// ─── Predictive Early Swap: Is it going to land on this face?
+function isCommittedToFace(rb: RapierRigidBody): boolean {
+    // 1. Must be close to the floor to prevent mid-air swaps
+    const pos = rb.translation();
+    if (pos.y > DICE_REST_HEIGHT + 0.15) return false;
+
+    // 2. Linear and Angular energy must be low enough that it cannot tip over a 45 degree edge
+    const linvel = rb.linvel();
+    const angvel = rb.angvel();
+    const linSpeed = Math.sqrt(linvel.x ** 2 + linvel.y ** 2 + linvel.z ** 2);
+    const angSpeed = Math.sqrt(angvel.x ** 2 + angvel.y ** 2 + angvel.z ** 2);
+
+    if (linSpeed > 0.8 || angSpeed > 3.0) return false;
+
+    // 3. The current top face must be tilted less than ~35 degrees (0.6 radians) from straight up.
+    // If it is tilted 35 degrees, and angSpeed is < 3.0, it does not have enough energy to rotate 
+    // the remaining 10 degrees to crest the 45-degree tipping point of the cube. It WILL fall back down.
+    const rot = rb.rotation();
+    const q = new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w);
+    let bestDot = -Infinity;
+
+    for (const { axis } of FACE_NORMALS) {
+        const worldNormal = axis.clone().applyQuaternion(q);
+        const dot = worldNormal.dot(WORLD_UP);
+        if (dot > bestDot) {
+            bestDot = dot;
+        }
+    }
+
+    // dot product of 1.0 is perfectly flat. 0.81 is ~35 degrees.
+    return bestDot > 0.81;
+}
+
 // ─── Single Die with RigidBody ─────────────────────────────
-function PhysicsDie({ rbRef }: {
+function PhysicsDie({ rbRef, visualRotation }: {
     rbRef: React.RefObject<RapierRigidBody | null>;
+    visualRotation: THREE.Euler;
 }) {
     const halfSize = DICE_SIZE / 2;
 
@@ -195,29 +231,31 @@ function PhysicsDie({ rbRef }: {
         >
             <CuboidCollider args={[halfSize, halfSize, halfSize]} />
 
-            <RoundedBox
-                args={[DICE_SIZE, DICE_SIZE, DICE_SIZE]}
-                radius={0.03}
-                smoothness={4}
-                castShadow
-            >
-                <meshStandardMaterial
-                    color="#fafafa"
-                    roughness={0.2}
-                    metalness={0.1}
-                    emissive="#ffffff"
-                    emissiveIntensity={0.02}
-                />
-            </RoundedBox>
+            <group rotation={visualRotation}>
+                <RoundedBox
+                    args={[DICE_SIZE, DICE_SIZE, DICE_SIZE]}
+                    radius={0.03}
+                    smoothness={4}
+                    castShadow
+                >
+                    <meshStandardMaterial
+                        color={MATERIALS.dice.color}
+                        roughness={MATERIALS.dice.roughness}
+                        metalness={MATERIALS.dice.metalness}
+                        emissive={MATERIALS.dice.color}
+                        emissiveIntensity={MATERIALS.dice.emissiveIntensity}
+                    />
+                </RoundedBox>
 
-            {FACE_CONFIGS.map((face) => (
-                <DotFace
-                    key={face.value}
-                    value={face.value}
-                    position={face.position}
-                    rotation={face.rotation}
-                />
-            ))}
+                {FACE_CONFIGS.map((face) => (
+                    <DotFace
+                        key={face.value}
+                        value={face.value}
+                        position={face.position}
+                        rotation={face.rotation}
+                    />
+                ))}
+            </group>
         </RigidBody>
     );
 }
@@ -285,6 +323,14 @@ export function DiceScene() {
     const activePlayer = players[currentPlayerIndex];
     const playerTileIndex = activePlayer?.position ?? 0;
 
+    // Visual corrective rotation (The "Invisible Hand")
+    const [d1VisualRot, setD1VisualRot] = useState<THREE.Euler>(new THREE.Euler(0, 0, 0));
+    const [d2VisualRot, setD2VisualRot] = useState<THREE.Euler>(new THREE.Euler(0, 0, 0));
+
+    // Refs to track if we've already done the early swap for this roll
+    const d1SwappedRef = useRef(false);
+    const d2SwappedRef = useRef(false);
+
     const throwTarget = useMemo(() => {
         return computeThrowTarget(playerTileIndex);
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -300,6 +346,12 @@ export function DiceScene() {
             settledFrames.current = 0;
             isSettledRef.current = false;
             setDiceSettled(false); // Reset settled signal for new roll
+
+            // Reset visual overloads
+            setD1VisualRot(new THREE.Euler(0, 0, 0));
+            setD2VisualRot(new THREE.Euler(0, 0, 0));
+            d1SwappedRef.current = false;
+            d2SwappedRef.current = false;
         }
         wasRolling.current = isRolling;
     }, [isRolling, setDiceSettled]);
@@ -364,16 +416,50 @@ export function DiceScene() {
             }
         }
 
+        // ── Predictive Early Swap ──
+        if (isRolling && d1 && d2) {
+            // Check die 1
+            if (!d1SwappedRef.current && isCommittedToFace(d1)) {
+                d1SwappedRef.current = true;
+                const physicalFace = detectTopFace(d1);
+                const qF = VALUE_TO_QUATERNION[physicalFace].clone();
+                const qT = VALUE_TO_QUATERNION[die1Val].clone();
+                const diff = qF.invert().multiply(qT);
+                setD1VisualRot(new THREE.Euler().setFromQuaternion(diff));
+            }
+
+            // Check die 2
+            if (!d2SwappedRef.current && isCommittedToFace(d2)) {
+                d2SwappedRef.current = true;
+                const physicalFace = detectTopFace(d2);
+                const qF = VALUE_TO_QUATERNION[physicalFace].clone();
+                const qT = VALUE_TO_QUATERNION[die2Val].clone();
+                const diff = qF.invert().multiply(qT);
+                setD2VisualRot(new THREE.Euler().setFromQuaternion(diff));
+            }
+        }
+
         // ── Settling detection ──
         if (isRolling && !isSettledRef.current && d1 && d2) {
             if (isBodySettled(d1) && isBodySettled(d2)) {
                 settledFrames.current += 1;
                 if (settledFrames.current > 30) {
                     isSettledRef.current = true;
-                    setDiceSettled(true); // Signal to useDiceRoll
-                    const face1 = detectTopFace(d1);
-                    const face2 = detectTopFace(d2);
-                    console.log(`Dice settled: face1=${face1} (target=${die1Val}), face2=${face2} (target=${die2Val})`);
+
+                    // Fallback: If the early swap somehow missed (e.g. framerate drop), do it now
+                    if (!d1SwappedRef.current) {
+                        const physicalFace1 = detectTopFace(d1);
+                        const diff1 = VALUE_TO_QUATERNION[physicalFace1].clone().invert().multiply(VALUE_TO_QUATERNION[die1Val].clone());
+                        setD1VisualRot(new THREE.Euler().setFromQuaternion(diff1));
+                    }
+                    if (!d2SwappedRef.current) {
+                        const physicalFace2 = detectTopFace(d2);
+                        const diff2 = VALUE_TO_QUATERNION[physicalFace2].clone().invert().multiply(VALUE_TO_QUATERNION[die2Val].clone());
+                        setD2VisualRot(new THREE.Euler().setFromQuaternion(diff2));
+                    }
+
+                    // Signal that we are ready
+                    setDiceSettled(true);
                 }
             } else {
                 settledFrames.current = 0;
@@ -390,8 +476,8 @@ export function DiceScene() {
             {/* Dice are conditionally mounted */}
             {showDice && (
                 <>
-                    <PhysicsDie rbRef={die1Ref} />
-                    <PhysicsDie rbRef={die2Ref} />
+                    <PhysicsDie rbRef={die1Ref} visualRotation={d1VisualRot} />
+                    <PhysicsDie rbRef={die2Ref} visualRotation={d2VisualRot} />
                 </>
             )}
         </>

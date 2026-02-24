@@ -19,14 +19,14 @@ export function LightingRig() {
         <>
             {/* Soft overall illumination */}
             <ambientLight
-                intensity={isDark ? LIGHTING.ambient.intensity : 0.6}
+                intensity={isDark ? LIGHTING.ambient.intensityDark : LIGHTING.ambient.intensityLight}
                 color={LIGHTING.ambient.color}
             />
 
             {/* Main directional light — casts shadows */}
             <directionalLight
                 ref={directionalRef}
-                intensity={isDark ? LIGHTING.directional.intensity : 0.6}
+                intensity={isDark ? LIGHTING.directional.intensityDark : LIGHTING.directional.intensityLight}
                 color={LIGHTING.directional.color}
                 position={LIGHTING.directional.position}
                 castShadow
@@ -42,7 +42,7 @@ export function LightingRig() {
 
             {/* Atmospheric accent glow beneath board */}
             <pointLight
-                intensity={isDark ? LIGHTING.accent.intensity : 0.1}
+                intensity={isDark ? LIGHTING.accent.intensityDark : LIGHTING.accent.intensityLight}
                 color={LIGHTING.accent.color}
                 position={LIGHTING.accent.position}
                 distance={10}

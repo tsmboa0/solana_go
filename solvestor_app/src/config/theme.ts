@@ -59,8 +59,17 @@ export const PLAYER_COLORS = [
 /** 3D Material parameters */
 export const MATERIALS = {
     board: {
-        color: '#0d0d1a',
+        colorDark: '#0d0d1a',   // Deep dark color so the center image pops
+        colorLight: '#eaeaef',  // Soft gray for light mode
         roughness: 0.85,
+        metalness: 0.4,
+    },
+    boardCenter: {
+        // These colors act as a multiplier (tint) on the image. 
+        // #ffffff = natural image brightness. Lower hexes (e.g. #aaaaaa) dim the image.
+        tintDark: '#ffffff',   // Dim the image in dark mode to blend with the dark board
+        tintLight: '#ffffff',  // Slightly dim the image in light mode
+        roughness: 0.8,        // How matte/glossy the image surface is
         metalness: 0.1,
     },
     tile: {
@@ -80,23 +89,33 @@ export const MATERIALS = {
         metalness: 0.7,
         emissiveIntensity: 0.2,
     },
+    dice: {
+        color: '#ffffff',
+        dotColor: '#000000',
+        roughness: 0.2,
+        metalness: 0.1,
+        emissiveIntensity: 0.05,
+    },
 } as const;
 
 /** Lighting configuration */
 export const LIGHTING = {
     ambient: {
-        intensity: 0.35,
+        intensityDark: 0.80,
+        intensityLight: 0.8,
         color: '#f0f0ff',
     },
     directional: {
-        intensity: 0.8,
+        intensityDark: 0.8,
+        intensityLight: 0.6,
         color: '#ffffff',
         position: [5, 10, 5] as [number, number, number],
         castShadow: true,
     },
     accent: {
-        intensity: 0.4,
-        color: '#9945FF',
+        intensityDark: 0.4,
+        intensityLight: 0.1,
+        color: '#ffffff', //'#9945FF',
         position: [0, -2, 0] as [number, number, number],
     },
 } as const;

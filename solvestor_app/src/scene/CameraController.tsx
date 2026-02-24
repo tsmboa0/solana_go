@@ -17,10 +17,12 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { useGameStore } from '@/stores/useGameStore';
+import { useCameraStore } from '@/stores/useCameraStore';
 import {
     BOARD_SIZE,
-    CAMERA_LERP_FACTOR,
-    CAMERA_ZOOM_LERP_MULTIPLIER,
+    CAMERA_BASE_SPEED,
+    CAMERA_ZOOM_IN_SPEED,
+    CAMERA_ZOOM_OUT_SPEED,
     CAMERA_START_POSITION,
     CAMERA_START_TARGET,
     CAMERA_FOLLOW_OFFSET,
@@ -97,12 +99,14 @@ export function CameraController() {
     const movingTileIndex = useGameStore((s) => s.movingTileIndex);
     const players = useGameStore((s) => s.players);
     const currentPlayerIndex = useGameStore((s) => s.currentPlayerIndex);
+    const setCameraDetached = useCameraStore((s) => s.setCameraDetached);
+    const isCameraDetached = useCameraStore((s) => s.isCameraDetached);
 
     // --- Smooth interpolation targets (used in follow mode) ---
     const targetPosition = useRef(OVERVIEW_POSITION.clone());
     const targetLookAt = useRef(BOARD_CENTER.clone());
     const currentLookAt = useRef(BOARD_CENTER.clone());
-    const lerpSpeed = useRef(CAMERA_LERP_FACTOR);
+    const lerpSpeed = useRef(CAMERA_BASE_SPEED);
 
     // Whether the camera is in auto-follow mode
     const isFollowing = useRef(false);
@@ -132,9 +136,9 @@ export function CameraController() {
     // ─── Enable/disable orbit controls based on phase ───
     useEffect(() => {
         if (controlsRef.current) {
-            controlsRef.current.enabled = isFreeLookPhase;
+            controlsRef.current.enabled = true; // ALWAYS enabled so user can always explore
         }
-        // Camera is ALWAYS following targets (lerp always runs)
+        // Camera is ALWAYS following targets (lerp always runs) unless detached
         isFollowing.current = true;
     }, [isFreeLookPhase]);
 
@@ -172,7 +176,7 @@ export function CameraController() {
             0,
             tilePos.z + sd.z * CAMERA_LOOK_AHEAD_DISTANCE
         );
-        lerpSpeed.current = CAMERA_LERP_FACTOR;
+        lerpSpeed.current = CAMERA_BASE_SPEED;
     }, [movingTileIndex, phase]);
 
     // ─── Zoom in on landing: save follow position first ───
@@ -190,7 +194,7 @@ export function CameraController() {
             // Zoom in closer to the tile
             targetPosition.current.copy(tilePos).add(ZOOM_OFFSET);
             targetLookAt.current.copy(tilePos);
-            lerpSpeed.current = CAMERA_LERP_FACTOR * CAMERA_ZOOM_LERP_MULTIPLIER;
+            lerpSpeed.current = CAMERA_ZOOM_IN_SPEED;
         }
     }, [phase, getPlayerTilePos]);
 
@@ -203,7 +207,7 @@ export function CameraController() {
                 preZoomPosition.current = null;
                 preZoomLookAt.current = null;
             }
-            lerpSpeed.current = CAMERA_LERP_FACTOR;
+            lerpSpeed.current = CAMERA_ZOOM_OUT_SPEED;
         }
     }, [phase]);
 
@@ -214,7 +218,7 @@ export function CameraController() {
             if (!playersWhoHavePlayed.current.has(currentPlayerIndex)) {
                 targetPosition.current.copy(OVERVIEW_POSITION);
                 targetLookAt.current.copy(BOARD_CENTER);
-                lerpSpeed.current = CAMERA_LERP_FACTOR;
+                lerpSpeed.current = CAMERA_BASE_SPEED;
 
                 if (controlsRef.current) {
                     controlsRef.current.target.copy(BOARD_CENTER);
@@ -245,7 +249,7 @@ export function CameraController() {
                 0,
                 tz + dir.z * CAMERA_LOOK_AHEAD_DISTANCE
             );
-            lerpSpeed.current = CAMERA_LERP_FACTOR;
+            lerpSpeed.current = CAMERA_BASE_SPEED;
 
             // Sync orbit controls target
             if (controlsRef.current) {
@@ -266,13 +270,16 @@ export function CameraController() {
     const recenter = useCallback(() => {
         if (!controlsRef.current) return;
 
-        // Reset orbit target to board center
-        controlsRef.current.target.copy(BOARD_CENTER);
+        // Reset orbit target to board center only if waiting
+        if (useGameStore.getState().phase === 'waiting') {
+            controlsRef.current.target.copy(BOARD_CENTER);
+            camera.position.copy(OVERVIEW_POSITION);
+        }
 
-        // Reset camera to overview position
-        camera.position.copy(OVERVIEW_POSITION);
+        // Re-attach camera to resume auto-following
+        setCameraDetached(false);
         controlsRef.current.update();
-    }, [camera]);
+    }, [camera, setCameraDetached]);
 
     // Register recenter function globally
     useEffect(() => {
@@ -284,7 +291,7 @@ export function CameraController() {
     const lastLogTime = useRef(0);
 
     // ─── Smooth interpolation each frame (only in follow mode) ───
-    useFrame(() => {
+    useFrame((_, delta) => {
         // Debug logging (throttled to every 1 second)
         const now = Date.now();
         if (now - lastLogTime.current > 1000) {
@@ -297,10 +304,16 @@ export function CameraController() {
             );
         }
 
-        if (!isFollowing.current) return;
+        if (!isFollowing.current || isCameraDetached) return;
 
-        camera.position.lerp(targetPosition.current, lerpSpeed.current);
-        currentLookAt.current.lerp(targetLookAt.current, lerpSpeed.current);
+        // --- Delta-Time Independent Lerping ---
+        // Formula: 1 - (1 - lerpSpeed)^(delta * 60)
+        // This calculates the real-world distance to travel factoring in how many milliseconds
+        // actually passed since the last frame was drawn, scaling 144hz monitors down to 60fps speeds.
+        const dtLerpSpeed = 1 - Math.pow(1 - lerpSpeed.current, delta * 60);
+
+        camera.position.lerp(targetPosition.current, dtLerpSpeed);
+        currentLookAt.current.lerp(targetLookAt.current, dtLerpSpeed);
         camera.lookAt(currentLookAt.current);
 
         // Sync OrbitControls target so it's correct when re-enabled
@@ -337,7 +350,15 @@ export function CameraController() {
                 RIGHT: THREE.MOUSE.PAN,
             }}
             // Start enabled for initial overview
-            enabled={isFreeLookPhase}
+            enabled={true}
+            onChange={() => {
+                // Determine if interaction is user-driven (not script-driven `update()`)
+                // Unfortunately Drei's onChange doesn't provide the event directly cleanly
+                // so we rely on `onStart` which reliably means user interaction began.
+            }}
+            onStart={() => {
+                setCameraDetached(true);
+            }}
         />
     );
 }

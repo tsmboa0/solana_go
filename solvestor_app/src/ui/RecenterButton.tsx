@@ -6,17 +6,18 @@
 // ============================================================
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { useGameStore } from '@/stores/useGameStore';
 import { useUIStore } from '@/stores/useUIStore';
+import { useCameraStore } from '@/stores/useCameraStore';
 import { recenterCamera } from '@/scene/CameraController';
 
 export function RecenterButton() {
-    const phase = useGameStore((s) => s.phase);
     const theme = useUIStore((s) => s.theme);
     const isDark = theme === 'dark';
 
-    // Only show during free-look phases
-    const isVisible = phase === 'waiting' || phase === 'turnEnd';
+    const isCameraDetached = useCameraStore((s) => s.isCameraDetached);
+
+    // Only show when the user has manually explored away from the auto-target
+    const isVisible = isCameraDetached;
 
     return (
         <AnimatePresence>

@@ -6,10 +6,18 @@
 
 import { useUIStore } from '@/stores/useUIStore';
 import { MATERIALS } from '@/config/theme';
+import { useTexture } from '@react-three/drei';
+import * as THREE from 'three';
+import boardImage from '@/assets/solvestor-board.webp';
 
 export function Board() {
     const theme = useUIStore((s) => s.theme);
     const isDark = theme === 'dark';
+
+    const centerTexture = useTexture(boardImage);
+    // Explicitly decode the raw image pixels as standard RGB so Three.js 
+    // doesn't incorrectly interpret them as a linear math color space.
+    centerTexture.colorSpace = THREE.SRGBColorSpace;
 
     return (
         <group>
@@ -21,25 +29,27 @@ export function Board() {
             >
                 <planeGeometry args={[7, 7]} />
                 <meshStandardMaterial
-                    color={isDark ? MATERIALS.board.color : '#e8e8f0'}
+                    color={isDark ? MATERIALS.board.colorDark : MATERIALS.board.colorLight}
                     roughness={MATERIALS.board.roughness}
                     metalness={MATERIALS.board.metalness}
                 />
             </mesh>
 
-            {/* Subtle center area — slightly different shade */}
+            {/* Center Area Texture */}
             <mesh
                 receiveShadow
                 rotation={[-Math.PI / 2, 0, 0]}
                 position={[0, 0, 0]}
             >
-                <planeGeometry args={[4.2, 4.2]} />
+                {/* 4.95 perfectly fills the 9-tile gap between the 0.8 depth property border */}
+                <planeGeometry args={[4.95, 4.95]} />
+                {/* Standard material reacts to scene lighting and receives shadows. 
+                    The color prop acts as a multiplier/dimmer on the image texture. */}
                 <meshStandardMaterial
-                    color={isDark ? '#0f0f1f' : '#f0f0f5'}
-                    roughness={0.9}
-                    metalness={0.05}
-                    transparent
-                    opacity={0.6}
+                    map={centerTexture}
+                    color={isDark ? MATERIALS.boardCenter.tintDark : MATERIALS.boardCenter.tintLight}
+                    roughness={MATERIALS.boardCenter.roughness}
+                    metalness={MATERIALS.boardCenter.metalness}
                 />
             </mesh>
 

@@ -21,9 +21,11 @@ interface CameraState {
     mode: CameraMode;
     target: CameraTarget;
     isTransitioning: boolean;
+    isCameraDetached: boolean;
 
     setMode: (mode: CameraMode) => void;
     setTarget: (target: CameraTarget) => void;
+    setCameraDetached: (detached: boolean) => void;
     focusOnTile: (tileIndex: number, zoom?: number) => void;
     followPlayer: (tileIndex: number) => void;
     zoomOnLand: (tileIndex: number) => void;
@@ -40,11 +42,14 @@ export const useCameraStore = create<CameraState>()((set) => ({
     mode: 'follow',
     target: DEFAULT_TARGET,
     isTransitioning: false,
+    isCameraDetached: false,
 
     setMode: (mode: CameraMode) => set({ mode }),
 
+    setCameraDetached: (detached: boolean) => set({ isCameraDetached: detached }),
+
     setTarget: (target: CameraTarget) =>
-        set({ target, isTransitioning: true }),
+        set({ target, isTransitioning: true, isCameraDetached: false }),
 
     focusOnTile: (tileIndex: number, zoom = 1) => {
         const layout = TILE_LAYOUTS[tileIndex];
@@ -80,6 +85,7 @@ export const useCameraStore = create<CameraState>()((set) => ({
             },
             mode: 'follow',
             isTransitioning: true,
+            isCameraDetached: false,
         });
     },
 
@@ -110,5 +116,6 @@ export const useCameraStore = create<CameraState>()((set) => ({
             },
             mode: 'overview',
             isTransitioning: true,
+            isCameraDetached: false,
         }),
 }));
