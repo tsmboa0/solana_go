@@ -4,6 +4,10 @@
 // All magic numbers live here. No hardcoded values in components.
 // ============================================================
 
+
+// Zoom out Desired 📷 Camera: [4.85, 3.39, 0.75]  |  🎯 Target: [-1.75, -0.00, 2.85] 
+// Zoom out Current 📷 Camera: [3.11, 5.50, 1.01]  |  🎯 Target: [-2.30, -0.00, 2.87]
+
 /** Board dimensions */
 export const BOARD_SIZE = 40;
 export const TILES_PER_SIDE = 11; // 9 regular + 2 corners shared
@@ -19,7 +23,7 @@ export const BOARD_PADDING = 0.15;        // Gap between tiles
 export const BOARD_TOTAL_SIZE = TILES_PER_SIDE * TILE_WIDTH + BOARD_PADDING * 2;
 
 /** Environment Layout */
-export const ROAD_OFFSET = 6.0;           // Distance from the center of the board to the center of the road/truck path
+export const ROAD_OFFSET = 5.5;           // Distance from the center of the board to the center of the road/truck path
 export const CITY_OFFSET = 2.0;           // Additional distance outward from ROAD_OFFSET where buildings begin to spawn
 
 /** Economy */
