@@ -36,6 +36,7 @@ import {
     DICE_TORQUE_STRENGTH,
 } from '@/config/game';
 import { MATERIALS } from '@/config/theme';
+import { soundManager } from '@/utils/SoundManager';
 
 // ─── Dot layout positions for each face value ──────────────
 const DOT_PATTERNS: Record<number, [number, number][]> = {
@@ -318,6 +319,7 @@ export function DiceScene() {
     const settledFrames = useRef(0);
     const isSettledRef = useRef(false);
     const wasRolling = useRef(false);
+    const rollingSoundPlayedRef = useRef(false);
 
     // Active player tile for throw direction
     const activePlayer = players[currentPlayerIndex];
@@ -345,6 +347,7 @@ export function DiceScene() {
             needsThrow.current = true;
             settledFrames.current = 0;
             isSettledRef.current = false;
+            rollingSoundPlayedRef.current = false;
             setDiceSettled(false); // Reset settled signal for new roll
 
             // Reset visual overloads
@@ -436,6 +439,19 @@ export function DiceScene() {
                 const qT = VALUE_TO_QUATERNION[die2Val].clone();
                 const diff = qF.invert().multiply(qT);
                 setD2VisualRot(new THREE.Euler().setFromQuaternion(diff));
+            }
+
+            // Play the rolling sound once roughly halfway through the throw.
+            // When y falls below a certain height, it's about to land.
+            // A good proxy for "middle of the motion" is when the die has
+            // dropped to about 1.0 on the Y axis and the sound hasn't played.
+            if (!rollingSoundPlayedRef.current) {
+                const pos1 = d1.translation();
+                const pos2 = d2.translation();
+                if (pos1.y < 1.0 || pos2.y < 1.0) {
+                    rollingSoundPlayedRef.current = true;
+                    soundManager.play('rolling-dice');
+                }
             }
         }
 

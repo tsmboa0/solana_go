@@ -7,18 +7,16 @@ export function Skyline() {
     const theme = useUIStore((s) => s.theme);
     const isDark = theme === 'dark';
 
-    // 3 Towers farther out
-    const towers = useMemo(() => [
-        { position: [-26, 0, -26], scale: [4.5, 18, 4.5], tint: '#0d9b9b' }, // Teal
-        { position: [24, 0, -30], scale: [4.0, 15, 4.0], tint: '#663399' }, // Purple
-        { position: [30, 0, 24], scale: [3.5, 13, 3.5], tint: '#0d9b9b' }, // Teal
-    ], []);
+    // One Hero Tower to anchor the skyline
+    const heroTower = useMemo(() => ({
+        position: [-24, 0, -28],
+        scale: [6.5, 24, 6.5],
+        tint: '#14F195' // Solana green accent glow
+    }), []);
 
     return (
         <group>
-            {towers.map((tower, idx) => (
-                <Tower key={idx} tower={tower} isDark={isDark} />
-            ))}
+            <Tower tower={heroTower} isDark={isDark} />
         </group>
     );
 }
@@ -28,40 +26,43 @@ function Tower({ tower, isDark }: { tower: any, isDark: boolean }) {
 
     const windowTex = useMemo(() => {
         const canvas = document.createElement('canvas');
-        canvas.width = 128;
-        canvas.height = 128;
+        canvas.width = 256;
+        canvas.height = 256;
         const ctx = canvas.getContext('2d')!;
 
-        // Base dark window
-        ctx.fillStyle = '#0a0a0a';
-        ctx.fillRect(0, 0, 128, 128);
+        // Base dark glass
+        ctx.fillStyle = '#050508';
+        ctx.fillRect(0, 0, 256, 256);
 
-        // Window lights
+        // Prominent glowing window lines
         ctx.fillStyle = '#ffffff';
-        for (let x = 8; x < 128; x += 16) {
-            for (let y = 8; y < 128; y += 16) {
-                // Occasional dark window for realism
-                if (Math.random() > 0.2) {
-                    ctx.fillRect(x, y, 6, 8);
+        for (let x = 16; x < 256; x += 32) {
+            for (let y = 8; y < 256; y += 12) {
+                // More consistent lit windows for the hero tower
+                if (Math.random() > 0.1) {
+                    ctx.fillRect(x, y, 16, 6);
                 }
             }
         }
+
+        // Add a vertical branding stripe
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(120, 0, 16, 256);
 
         const tex = new THREE.CanvasTexture(canvas);
         tex.wrapS = THREE.RepeatWrapping;
         tex.wrapT = THREE.RepeatWrapping;
 
-        // Repeat scale to match tower size visually
-        tex.repeat.set(tower.scale[0] * 1.5, tower.scale[1]);
+        tex.repeat.set(tower.scale[0] * 0.8, tower.scale[1] * 0.5);
         return tex;
     }, [tower.scale]);
 
     useFrame((state) => {
         if (materialRef.current) {
             const timeOffset = tower.position[0];
-            const pulse = 0.5 + Math.sin(state.clock.elapsedTime * 1.5 + timeOffset) * 0.3;
-            // Pulse logic based on theme
-            const targetIntensity = isDark ? (0.3 + pulse * 0.5) : (0.1 + pulse * 0.3);
+            const pulse = 0.5 + Math.sin(state.clock.elapsedTime * 1.2 + timeOffset) * 0.5;
+            // Higher base intensity for the Hero Tower
+            const targetIntensity = isDark ? (0.5 + pulse * 0.4) : (0.2 + pulse * 0.3);
             materialRef.current.emissiveIntensity = targetIntensity;
         }
     });
@@ -71,12 +72,12 @@ function Tower({ tower, isDark }: { tower: any, isDark: boolean }) {
             <boxGeometry args={tower.scale} />
             <meshStandardMaterial
                 ref={materialRef}
-                color={isDark ? '#1a1a2e' : '#eeeeee'}
+                color={isDark ? '#0a0f18' : '#e0e5f0'}
                 emissive={tower.tint}
                 emissiveMap={windowTex}
-                emissiveIntensity={0.3}
-                roughness={0.2}
-                metalness={0.8}
+                emissiveIntensity={0.5}
+                roughness={0.15}
+                metalness={0.9}
             />
         </mesh>
     );

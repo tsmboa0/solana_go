@@ -7,11 +7,11 @@ export function BuildingBlocks() {
     const theme = useUIStore((s) => s.theme);
     const isDark = theme === 'dark';
 
-    const { whiteTransforms, glassTransforms, grayTransforms } = useMemo(() => {
-        const white: THREE.Matrix4[] = [];
-        const glass: THREE.Matrix4[] = [];
-        const gray: THREE.Matrix4[] = [];
-
+    const { transforms1, transforms2, transforms3, transforms4 } = useMemo(() => {
+        const t1: THREE.Matrix4[] = [];
+        const t2: THREE.Matrix4[] = [];
+        const t3: THREE.Matrix4[] = [];
+        const t4: THREE.Matrix4[] = [];
         const dummy = new THREE.Object3D();
 
         const roadWidth = (BOARD_TOTAL_SIZE || 6.35) * 0.4;
@@ -22,11 +22,9 @@ export function BuildingBlocks() {
         const step = blockSize + blockSpacing;
 
         const maxDist = 36; // max distance from center
-
         const roadMargin = roadWidth / 2 + 0.8; // Give buildings some breathing room off the roads
 
-        // simple seeded random for deterministic placement
-        let seed = 998244353;
+        let seed = 12345;
         const random = () => {
             seed = (seed * 16807) % 2147483647;
             return (seed - 1) / 2147483646;
@@ -40,7 +38,6 @@ export function BuildingBlocks() {
         ];
 
         for (const quad of quadrants) {
-            // align first building edge to the road margin + plaza edge
             const startX = roadMargin + blockSize / 2;
             const startZ = ringOuter + 1 + blockSize / 2;
 
@@ -50,37 +47,42 @@ export function BuildingBlocks() {
                     const x = xOff * quad.dirX;
                     const z = zOff * quad.dirZ;
 
-                    // Make the city roughly circular outer bounds
                     const distSq = x * x + z * z;
                     if (distSq > maxDist * maxDist) continue;
 
-                    // Add organic fade-out chance
                     if (distSq > (maxDist * 0.7) ** 2) {
                         if (random() > 0.4) continue;
                     }
 
-                    const height = 3 + random() * 5; // Height 3-8
+                    const r = random();
+                    const isFar = distSq > (maxDist * 0.5) ** 2;
+                    let height = 0;
+
+                    if (r < 0.1 && isFar) {
+                        height = 10 + random() * 6; // Tall (10-16)
+                    } else if (r < 0.4) {
+                        height = 2 + random() * 1;  // Short (2-3)
+                    } else {
+                        height = 4 + random() * 2;  // Medium (4-6)
+                    }
+
                     const scaleX = blockSize * (0.8 + 0.2 * random());
                     const scaleZ = blockSize * (0.8 + 0.2 * random());
 
-                    // Do NOT randomly rotate buildings
                     dummy.position.set(x, height / 2 - 0.05, z);
                     dummy.scale.set(scaleX, height, scaleZ);
                     dummy.rotation.set(0, 0, 0);
                     dummy.updateMatrix();
 
-                    const matType = random();
-                    if (matType < 0.40) {
-                        white.push(dummy.matrix.clone());
-                    } else if (matType < 0.75) {
-                        glass.push(dummy.matrix.clone());
-                    } else {
-                        gray.push(dummy.matrix.clone());
-                    }
+                    const rType = random();
+                    if (rType < 0.25) t1.push(dummy.matrix.clone());
+                    else if (rType < 0.50) t2.push(dummy.matrix.clone());
+                    else if (rType < 0.75) t3.push(dummy.matrix.clone());
+                    else t4.push(dummy.matrix.clone());
                 }
             }
 
-            // Do the same for zOff along X axis but avoid doubling the corner
+            // X-axis alignment
             for (let xOff = ringOuter + 1 + blockSize / 2; xOff <= maxDist; xOff += step) {
                 for (let zOff = roadMargin + blockSize / 2; zOff < ringOuter + 1 + blockSize / 2; zOff += step) {
                     const x = xOff * quad.dirX;
@@ -90,7 +92,18 @@ export function BuildingBlocks() {
                     if (distSq > maxDist * maxDist) continue;
                     if (distSq > (maxDist * 0.7) ** 2 && random() > 0.4) continue;
 
-                    const height = 3 + random() * 5;
+                    const r = random();
+                    const isFar = distSq > (maxDist * 0.5) ** 2;
+                    let height = 0;
+
+                    if (r < 0.1 && isFar) {
+                        height = 10 + random() * 6; // Tall (10-16)
+                    } else if (r < 0.4) {
+                        height = 2 + random() * 1;  // Short (2-3)
+                    } else {
+                        height = 4 + random() * 2;  // Medium (4-6)
+                    }
+
                     const scaleX = blockSize * (0.8 + 0.2 * random());
                     const scaleZ = blockSize * (0.8 + 0.2 * random());
 
@@ -99,46 +112,75 @@ export function BuildingBlocks() {
                     dummy.rotation.set(0, 0, 0);
                     dummy.updateMatrix();
 
-                    const matType = random();
-                    if (matType < 0.40) {
-                        white.push(dummy.matrix.clone());
-                    } else if (matType < 0.75) {
-                        glass.push(dummy.matrix.clone());
-                    } else {
-                        gray.push(dummy.matrix.clone());
-                    }
+                    const rType = random();
+                    if (rType < 0.25) t1.push(dummy.matrix.clone());
+                    else if (rType < 0.50) t2.push(dummy.matrix.clone());
+                    else if (rType < 0.75) t3.push(dummy.matrix.clone());
+                    else t4.push(dummy.matrix.clone());
                 }
             }
         }
 
-        return { whiteTransforms: white, glassTransforms: glass, grayTransforms: gray };
+        return { transforms1: t1, transforms2: t2, transforms3: t3, transforms4: t4 };
     }, []);
 
-    const whiteMat = useMemo(() => new THREE.MeshStandardMaterial({
-        color: isDark ? '#aaaaaa' : '#ffffff',
-        roughness: 0.1,
-        metalness: 0.2
-    }), [isDark]);
+    const emissiveMap = useMemo(() => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d')!;
 
-    const glassMat = useMemo(() => new THREE.MeshStandardMaterial({
-        color: isDark ? '#3d5c75' : '#88bbff',
-        roughness: 0.05,
-        metalness: 0.9,
-        transparent: true,
-        opacity: 0.9
-    }), [isDark]);
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, 256, 256);
 
-    const grayMat = useMemo(() => new THREE.MeshStandardMaterial({
-        color: isDark ? '#555555' : '#e0e0e0',
-        roughness: 0.7,
-        metalness: 0.2
-    }), [isDark]);
+        for (let x = 4; x < 256; x += 32) {
+            for (let y = 4; y < 256; y += 16) {
+                if (Math.random() > 0.3) {
+                    // Subtle variation in window brightness
+                    ctx.fillStyle = Math.random() > 0.8 ? '#77aadd' : '#223355';
+                    ctx.fillRect(x, y, 24, 12);
+                }
+            }
+        }
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(2, 4);
+        tex.needsUpdate = true;
+        return tex;
+    }, []);
+
+    const mat1 = useMemo(() => new THREE.MeshStandardMaterial({
+        color: isDark ? '#1a2233' : '#aaccff', // Blue
+        roughness: 0.3, metalness: 0.1,
+        emissive: '#224466', emissiveMap, emissiveIntensity: isDark ? 0.7 : 0.3
+    }), [isDark, emissiveMap]);
+
+    const mat2 = useMemo(() => new THREE.MeshStandardMaterial({
+        color: isDark ? '#1a332a' : '#aaffcc', // Teal
+        roughness: 0.3, metalness: 0.1,
+        emissive: '#226644', emissiveMap, emissiveIntensity: isDark ? 0.7 : 0.3
+    }), [isDark, emissiveMap]);
+
+    const mat3 = useMemo(() => new THREE.MeshStandardMaterial({
+        color: isDark ? '#2a2233' : '#ccaaff', // Purple/Steel
+        roughness: 0.3, metalness: 0.1,
+        emissive: '#442266', emissiveMap, emissiveIntensity: isDark ? 0.7 : 0.3
+    }), [isDark, emissiveMap]);
+
+    const mat4 = useMemo(() => new THREE.MeshStandardMaterial({
+        color: isDark ? '#1a1a1a' : '#dddddd', // Gray
+        roughness: 0.3, metalness: 0.1,
+        emissive: '#333333', emissiveMap, emissiveIntensity: isDark ? 0.7 : 0.3
+    }), [isDark, emissiveMap]);
 
     return (
         <group>
-            <InstancedBlocks transforms={whiteTransforms} material={whiteMat} />
-            <InstancedBlocks transforms={glassTransforms} material={glassMat} />
-            <InstancedBlocks transforms={grayTransforms} material={grayMat} />
+            <InstancedBlocks transforms={transforms1} material={mat1} />
+            <InstancedBlocks transforms={transforms2} material={mat2} />
+            <InstancedBlocks transforms={transforms3} material={mat3} />
+            <InstancedBlocks transforms={transforms4} material={mat4} />
         </group>
     );
 }
@@ -159,7 +201,10 @@ function InstancedBlocks({ transforms, material }: { transforms: THREE.Matrix4[]
 
     return (
         <instancedMesh ref={meshRef} args={[undefined, undefined, transforms.length]} castShadow receiveShadow>
-            <boxGeometry args={[1, 1, 1]} />
+            <boxGeometry args={[1, 1, 1]}>
+                {/* Adjusting UVs so they tile nicely for all faces */}
+                {/* Default BoxGeometry has UVs 0-1 on each face, which is perfect for our tiled texture */}
+            </boxGeometry>
             <primitive object={material} attach="material" />
         </instancedMesh>
     );

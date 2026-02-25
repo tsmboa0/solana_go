@@ -9,6 +9,7 @@ import { useRef, useEffect, useState } from 'react';
 import { TILE_LAYOUTS } from '@/utils/boardLayout';
 import { BOARD_SIZE, TOKEN_STEP_DURATION, TOKEN_Y_OFFSET } from '@/config/game';
 import { useGameStore } from '@/stores/useGameStore';
+import { soundManager } from '@/utils/SoundManager';
 import type { Vector3Tuple } from 'three';
 
 interface TokenMovementState {
@@ -58,6 +59,20 @@ export function useTokenMovement(
         // Animate through each step
         steps.forEach((tileIndex, i) => {
             setTimeout(() => {
+                const isFinalStep = i === steps.length - 1;
+
+                // Play audio synced with visual step landing.
+                // Hop animation `HOP_SPEED` is 8 (1/8 second = 125ms).
+                setTimeout(() => {
+                    if (isFinalStep) {
+                        soundManager.play('pay-rent');
+                    } else if (tileIndex === 0) {
+                        soundManager.play('go-sound');
+                    } else {
+                        soundManager.play('token-step');
+                    }
+                }, 125);
+
                 setCurrentStepTile(tileIndex);
                 setCurrentPosition(getWorldPosition(tileIndex));
 
@@ -67,7 +82,7 @@ export function useTokenMovement(
                 }
 
                 // Last step
-                if (i === steps.length - 1) {
+                if (isFinalStep) {
                     setIsMoving(false);
                     // Clear moving tile index when done
                     if (isActivePlayer) {

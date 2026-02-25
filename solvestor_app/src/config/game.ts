@@ -32,6 +32,11 @@ export const GO_SALARY = 2_000;
 export const TAX_AMOUNT = 1_500;
 export const MAX_PLAYERS = 4;
 
+/** Sound / Audio */
+export const SOUND_ENABLED = true;
+export const SOUND_BGM_VOLUME = 0.4;
+export const SOUND_SFX_VOLUME = 0.8;
+
 /** Camera defaults */
 export const CAMERA_FOLLOW_HEIGHT = 5.50;            // Matches start position Y
 export const CAMERA_ZOOM_ON_LAND = 1.3;
@@ -95,14 +100,14 @@ export const DICE_GAP = 0.5;
 export const DICE_DOT_RADIUS = 0.022;
 
 /** Dice physics (Rapier rigid body) */
-export const DICE_THROW_HEIGHT = 0.5;         // Start height for throw
+export const DICE_THROW_HEIGHT = 0.3;         // Start height for throw
 export const DICE_REST_HEIGHT = 0.18;         // Settled Y position (half-size + tiny lift)
 export const DICE_TILE_MARGIN = 0.5;          // How far inside the tile ring dice should land
-export const DICE_RESTITUTION = 0.2;          // Bounciness (0 = no bounce, 1 = full)
+export const DICE_RESTITUTION = 0.1;          // Bounciness (0 = no bounce, 1 = full)
 export const DICE_FRICTION = 1.0;             // Surface friction
-export const DICE_IMPULSE_STRENGTH = 0.1;     // Base impulse for throwing (vel ≈ impulse/mass)
-export const DICE_UPWARD_IMPULSE_BASE = 0.1;  // Base upward impulse
-export const DICE_UPWARD_IMPULSE_VAR = 0.1;   // Random variable upward impulse
-export const DICE_LATERAL_IMPULSE = 0.01;     // Base lateral separation impulse
-export const DICE_TORQUE_STRENGTH = 0.04;     // Torque impulse for tumbling
+export const DICE_IMPULSE_STRENGTH = 0.09;     // Base impulse for throwing (vel ≈ impulse/mass)
+export const DICE_UPWARD_IMPULSE_BASE = 0.09;  // Base upward impulse
+export const DICE_UPWARD_IMPULSE_VAR = 0.09;   // Random variable upward impulse
+export const DICE_LATERAL_IMPULSE = 0.005;     // Base lateral separation impulse
+export const DICE_TORQUE_STRENGTH = 0.02;     // Torque impulse for tumbling
 

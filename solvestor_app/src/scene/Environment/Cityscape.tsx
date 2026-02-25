@@ -1,4 +1,5 @@
 import { useUIStore } from '@/stores/useUIStore';
+import { Environment } from '@react-three/drei';
 import { Plaza } from './city/Plaza';
 import { Roads } from './city/Roads';
 import { BuildingBlocks } from './city/BuildingBlocks';
@@ -16,24 +17,25 @@ export function Cityscape() {
     return (
         <group>
             {/* Fog for distance depth */}
-            <fog attach="fog" args={[fogColor, 20, 50]} />
+            <fog attach="fog" args={[fogColor, 40, 120]} />
+
+            {/* Environment Reflections */}
+            <Environment preset="city" environmentIntensity={isDark ? 0.05 : 0.1} />
 
             {/* Base Citymatic Lighting */}
-            <ambientLight intensity={isDark ? 0.4 : 0.8} />
+            <ambientLight intensity={isDark ? 0.1 : 0.2} />
             <hemisphereLight
-                skyColor={isDark ? '#222233' : '#ffffff'}
-                groundColor={isDark ? '#050508' : '#aaaaaa'}
-                intensity={isDark ? 0.3 : 0.5}
+                args={[isDark ? '#222233' : '#ffffff', isDark ? '#050508' : '#aaaaaa', isDark ? 0.1 : 0.2]}
             />
             {/* Main Directional Sun */}
             <directionalLight
                 position={[15, 25, 10]}
-                intensity={isDark ? 1.0 : 1.5}
-                color={isDark ? '#e0e0ff' : '#ffffff'}
+                intensity={isDark ? 0.1 : 0.2}
+                color={isDark ? '#b0c0ff' : '#ffffff'}
                 castShadow
                 shadow-bias={-0.0001}
-                shadow-mapSize-width={2048}
-                shadow-mapSize-height={2048}
+                shadow-mapSize-width={1024}
+                shadow-mapSize-height={1024}
                 shadow-camera-near={1}
                 shadow-camera-far={100}
                 shadow-camera-left={-40}

@@ -10,6 +10,7 @@ import { motion } from 'framer-motion';
 import { useGameStore } from '@/stores/useGameStore';
 import { useUIStore } from '@/stores/useUIStore';
 import { useDiceRoll } from '@/hooks/useDiceRoll';
+import { soundManager } from '@/utils/SoundManager';
 
 export function DiceButton() {
     const phase = useGameStore((s) => s.phase);
@@ -22,6 +23,16 @@ export function DiceButton() {
     const canRoll = phase === 'waiting' && !isDiceAnimating;
     const isAnimating =
         phase === 'rolling' || phase === 'moving' || isDiceAnimating;
+
+    const handleRollClick = async () => {
+        if (!canRoll) return;
+
+        // Initialize Web Audio API on first user interaction 
+        await soundManager.init();
+        soundManager.playBGM();
+
+        performRoll();
+    };
 
     return (
         <div className="fixed bottom-4 left-0 right-0 z-50 flex flex-col items-center gap-3">
@@ -50,7 +61,7 @@ export function DiceButton() {
 
             {/* Big GO Button */}
             <motion.button
-                onClick={canRoll ? performRoll : undefined}
+                onClick={handleRollClick}
                 disabled={!canRoll}
                 className="relative"
                 whileTap={canRoll ? { scale: 0.92 } : {}}
