@@ -56,6 +56,18 @@ export const PLAYER_COLORS = [
     '#4ECDC4', // Teal   (Player 4, future)
 ] as const;
 
+export const COLOR_GROUP_MAP: Record<string, string> = {
+    brown: '#A8E6CF',      // using mint
+    light_blue: '#4ECDC4', // using teal
+    orange: '#FF8C42',     // using event orange
+    red: '#FF6B6B',        // using tier1 red
+    yellow: '#FFE66D',     // using gold
+    green: '#14F195',      // using solana green
+    dark_blue: '#7B68EE',  // using utility blue
+    purple: '#9945FF',     // using corner purple
+    grey: '#8888aa',       // using text secondary
+};
+
 /** 3D Material parameters */
 export const MATERIALS = {
     board: {

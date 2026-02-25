@@ -7,7 +7,8 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '@/stores/useUIStore';
 import { useGameStore } from '@/stores/useGameStore';
-import { TILES } from '@/config/tiles';
+import { TILES } from '@/config/boardTiles';
+import { COLOR_GROUP_MAP } from '@/config/theme';
 import { formatCurrency } from '@/utils/formatters';
 
 export function PortfolioModal() {
@@ -25,7 +26,7 @@ export function PortfolioModal() {
     // Calculate portfolio value
     const ownedTileData = player.ownedTiles.map((id) => TILES[id]);
     const portfolioValue = ownedTileData.reduce(
-        (sum, t) => sum + (t.price ?? 0),
+        (sum, t) => sum + (t.is_ownable && t.tile_function.action_type === 'ownable' ? (t.tile_function.buy_price ?? 0) : 0),
         0
     );
     const netWorth = player.balance + portfolioValue;
@@ -140,8 +141,8 @@ export function PortfolioModal() {
                                             key={i}
                                             className="transition-all"
                                             style={{
-                                                backgroundColor: t.colorBand,
-                                                flex: t.price ?? 1,
+                                                backgroundColor: t.color_group ? COLOR_GROUP_MAP[t.color_group] : '#888',
+                                                flex: (t.is_ownable && t.tile_function.action_type === 'ownable' ? t.tile_function.buy_price : 1) ?? 1,
                                             }}
                                         />
                                     ))}
@@ -169,7 +170,7 @@ export function PortfolioModal() {
 
                             {ownedTileData.map((t) => (
                                 <motion.div
-                                    key={t.id}
+                                    key={t.tile_index}
                                     className={`flex items-center gap-3 p-3 rounded-xl mb-2 ${isDark ? 'bg-white/[0.03]' : 'bg-black/[0.02]'
                                         }`}
                                     initial={{ opacity: 0, x: -10 }}
@@ -177,28 +178,34 @@ export function PortfolioModal() {
                                 >
                                     <div
                                         className="w-1 h-8 rounded-full"
-                                        style={{ backgroundColor: t.colorBand }}
+                                        style={{ backgroundColor: t.color_group ? COLOR_GROUP_MAP[t.color_group] : '#888' }}
                                     />
-                                    <span className="text-xl">{t.icon}</span>
+                                    <div className="w-8 h-8 flex items-center justify-center">
+                                        {t.image_url ? (
+                                            <img src={t.image_url} alt={t.project_name} className="w-full h-full object-contain rounded" />
+                                        ) : (
+                                            <div className="w-full h-full bg-gray-500 rounded" />
+                                        )}
+                                    </div>
                                     <div className="flex-1">
                                         <div
                                             className={`text-sm font-semibold ${isDark ? 'text-white/90' : 'text-gray-900'
                                                 }`}
                                         >
-                                            {t.name}
+                                            {t.project_name}
                                         </div>
                                         <div
                                             className={`text-xs ${isDark ? 'text-white/40' : 'text-gray-500'
                                                 }`}
                                         >
-                                            Rent: {formatCurrency(t.rent ?? 0)}
+                                            Rent: {formatCurrency(t.is_ownable && t.tile_function.action_type === 'ownable' ? t.tile_function.rent_value : 0)}
                                         </div>
                                     </div>
                                     <div
                                         className={`text-sm font-mono ${isDark ? 'text-white/60' : 'text-gray-700'
                                             }`}
                                     >
-                                        {formatCurrency(t.price ?? 0)}
+                                        {formatCurrency(t.is_ownable && t.tile_function.action_type === 'ownable' ? t.tile_function.buy_price : 0)}
                                     </div>
                                 </motion.div>
                             ))}

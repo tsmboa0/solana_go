@@ -7,8 +7,7 @@
 import { useCallback } from 'react';
 import { useGameStore } from '@/stores/useGameStore';
 import { useUIStore } from '@/stores/useUIStore';
-import { TILES } from '@/config/tiles';
-import { TAX_AMOUNT } from '@/config/game';
+import { TILES } from '@/config/boardTiles';
 import type { TileAction } from '@/types/game';
 
 export function useTileActions() {
@@ -26,18 +25,18 @@ export function useTileActions() {
             if (!tile) return { type: 'none' };
             const currentPlayer = getCurrentPlayer();
 
-            switch (tile.category) {
-                case 'property':
-                case 'utility': {
+            const fn = tile.tile_function;
+            switch (fn.action_type) {
+                case 'ownable': {
                     const owner = ownedTiles[tileId];
                     if (!owner) {
-                        return { type: 'buy', tileId, price: tile.price! };
+                        return { type: 'buy', tileId, price: fn.buy_price };
                     }
                     if (owner !== currentPlayer.id) {
                         return {
                             type: 'pay_rent',
                             tileId,
-                            amount: tile.rent!,
+                            amount: fn.rent_value,
                             ownerId: owner,
                         };
                     }
@@ -45,20 +44,21 @@ export function useTileActions() {
                 }
                 case 'event':
                     return { type: 'draw_event', tileId };
-                case 'tax':
-                    return { type: 'pay_tax', tileId, amount: TAX_AMOUNT };
+                case 'risk':
+                    return { type: 'pay_tax', tileId, amount: fn.penalty_value < 1 ? Math.floor(currentPlayer.balance * fn.penalty_value) : fn.penalty_value };
+                case 'defi':
+                    return { type: 'pay_tax', tileId, amount: fn.landing_fee };
+                case 'privacy':
+                    return { type: 'buy', tileId, price: fn.shield_cost }; // Treat as buy for now
+                case 'neutral':
+                    return { type: 'none' };
+                case 'governance':
+                    return { type: 'corner', tileId, cornerType: 'governance' };
                 case 'corner':
                     return {
                         type: 'corner',
                         tileId,
-                        cornerType:
-                            tileId === 0
-                                ? 'go'
-                                : tileId === 10
-                                    ? 'staking'
-                                    : tileId === 20
-                                        ? 'governance'
-                                        : 'liquidation',
+                        cornerType: fn.corner_type as any
                     };
                 default:
                     return { type: 'none' };
@@ -84,8 +84,8 @@ export function useTileActions() {
             const player = getCurrentPlayer();
             const owner = ownedTiles[tileId];
             const tile = TILES[tileId];
-            if (owner && tile.rent) {
-                payRent(player.id, owner, tile.rent);
+            if (owner && tile.tile_function.action_type === 'ownable') {
+                payRent(player.id, owner, tile.tile_function.rent_value);
             }
             closePopup();
             setPhase('turnEnd');

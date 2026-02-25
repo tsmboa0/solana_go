@@ -9,7 +9,7 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import type { Player, GamePhase, DiceResult } from '@/types/game';
 import { INITIAL_PLAYERS } from '@/config/players';
-import { TILES } from '@/config/tiles';
+import { TILES } from '@/config/boardTiles';
 import { BOARD_SIZE, GO_SALARY, TAX_AMOUNT } from '@/config/game';
 
 interface GameState {
@@ -91,11 +91,15 @@ export const useGameStore = create<GameState>()(
             set((state) => {
                 const player = state.players.find((p) => p.id === playerId);
                 const tile = TILES[tileId];
-                if (!player || !tile || tile.price === null) return;
-                if (player.balance < tile.price) return;
+                if (!player || !tile) return;
+
+                const fn = tile.tile_function;
+                if (!tile.is_ownable || fn.action_type !== 'ownable' || fn.buy_price === undefined) return;
+
+                if (player.balance < fn.buy_price) return;
                 if (state.ownedTiles[tileId]) return;
 
-                player.balance -= tile.price;
+                player.balance -= fn.buy_price;
                 player.ownedTiles.push(tileId);
                 state.ownedTiles[tileId] = playerId;
             });

@@ -8,7 +8,8 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '@/stores/useUIStore';
 import { useGameStore } from '@/stores/useGameStore';
-import { TILES } from '@/config/tiles';
+import { TILES } from '@/config/boardTiles';
+import { COLOR_GROUP_MAP } from '@/config/theme';
 import { formatCurrency } from '@/utils/formatters';
 
 export function BottomSheet() {
@@ -70,37 +71,49 @@ export function BottomSheet() {
 
                         {/* Category badge + Icon */}
                         <div className="flex items-center gap-3 mb-3">
-                            <span className="text-3xl">{tile.icon}</span>
+                            <div className="w-10 h-10 flex items-center justify-center">
+                                {tile.image_url ? (
+                                    <img src={tile.image_url} alt={tile.project_name} className="w-full h-full object-contain rounded" />
+                                ) : (
+                                    <div className="w-full h-full bg-gray-500 rounded" />
+                                )}
+                            </div>
                             <div>
                                 <h2
                                     className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'
                                         }`}
                                 >
-                                    {tile.name}
+                                    {tile.project_name}
                                 </h2>
                                 <span
                                     className="text-xs font-medium px-2 py-0.5 rounded-full uppercase tracking-wider"
                                     style={{
-                                        backgroundColor: tile.colorBand + '22',
-                                        color: tile.colorBand,
+                                        backgroundColor: (tile.color_group ? COLOR_GROUP_MAP[tile.color_group] : '#888') + '22',
+                                        color: tile.color_group ? COLOR_GROUP_MAP[tile.color_group] : '#888',
                                     }}
                                 >
-                                    {tile.category}
+                                    {tile.type}
                                 </span>
                             </div>
                         </div>
 
                         {/* Description */}
                         <p
-                            className={`text-sm mb-4 ${isDark ? 'text-white/60' : 'text-gray-600'
+                            className={`text-sm mb-2 ${isDark ? 'text-white/60' : 'text-gray-600'
                                 }`}
                         >
                             {tile.description}
                         </p>
+                        <p
+                            className={`text-sm mb-4 font-semibold ${isDark ? 'text-white/80' : 'text-gray-800'
+                                }`}
+                        >
+                            {tile.game_description}
+                        </p>
 
                         {/* Stats grid */}
                         <div className="grid grid-cols-2 gap-3 mb-4">
-                            {tile.price !== null && (
+                            {tile.is_ownable && tile.tile_function.action_type === 'ownable' && (
                                 <div
                                     className={`rounded-xl p-3 ${isDark ? 'bg-white/[0.05]' : 'bg-black/[0.03]'
                                         }`}
@@ -115,12 +128,12 @@ export function BottomSheet() {
                                         className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'
                                             }`}
                                     >
-                                        {formatCurrency(tile.price)}
+                                        {formatCurrency(tile.tile_function.buy_price)}
                                     </div>
                                 </div>
                             )}
 
-                            {tile.rent !== null && (
+                            {tile.is_ownable && tile.tile_function.action_type === 'ownable' && (
                                 <div
                                     className={`rounded-xl p-3 ${isDark ? 'bg-white/[0.05]' : 'bg-black/[0.03]'
                                         }`}
@@ -135,7 +148,7 @@ export function BottomSheet() {
                                         className={`text-base font-bold ${isDark ? 'text-emerald-400' : 'text-emerald-600'
                                             }`}
                                     >
-                                        {formatCurrency(tile.rent)}
+                                        {formatCurrency(tile.tile_function.rent_value)}
                                     </div>
                                 </div>
                             )}
@@ -160,7 +173,7 @@ export function BottomSheet() {
                             </div>
                         )}
 
-                        {!owner && tile.price !== null && (
+                        {!owner && tile.is_ownable && tile.tile_function.action_type === 'ownable' && (
                             <div
                                 className={`text-center text-sm py-2 ${isDark ? 'text-white/40' : 'text-gray-400'
                                     }`}

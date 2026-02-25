@@ -9,8 +9,8 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useGameStore } from '@/stores/useGameStore';
 import { useUIStore } from '@/stores/useUIStore';
 import { useCameraStore } from '@/stores/useCameraStore';
-import { TOKEN_STEP_DURATION } from '@/config/game';
-import { TILES } from '@/config/tiles';
+import { TOKEN_STEP_DURATION, POPUP_ACTION_DELAY_MS } from '@/config/game';
+import { TILES } from '@/config/boardTiles';
 
 export function useDiceRoll() {
     const rollDice = useGameStore((s) => s.rollDice);
@@ -60,12 +60,13 @@ export function useDiceRoll() {
             setPhase('landed');
             zoomOnLand(landedTileIndex);
 
-            // 4. After camera zoom, show action popup
+            // 4. After camera zoom, wait for the configurable delay, then show action popup
             setTimeout(() => {
                 setPhase('action');
 
                 // Determine action based on tile type
-                if (landedTile.category === 'property' || landedTile.category === 'utility') {
+                const fn = landedTile.tile_function;
+                if (fn.action_type === 'ownable') {
                     const owner = ownedTiles[landedTileIndex];
                     if (!owner) {
                         showPopup('buy', landedTileIndex);
@@ -75,14 +76,17 @@ export function useDiceRoll() {
                         // Own tile — no action needed, auto end turn
                         setPhase('turnEnd');
                     }
-                } else if (landedTile.category === 'event') {
+                } else if (fn.action_type === 'event') {
                     showPopup('event', landedTileIndex);
-                } else if (landedTile.category === 'tax') {
+                } else if (fn.action_type === 'risk' || fn.action_type === 'defi') {
                     showPopup('tax', landedTileIndex);
-                } else if (landedTile.category === 'corner') {
+                } else if (fn.action_type === 'corner') {
                     showPopup('corner', landedTileIndex);
+                } else if (fn.action_type === 'neutral' || fn.action_type === 'privacy' || fn.action_type === 'governance') {
+                    // For now, these might need dedicated popups, falling back to none
+                    setPhase('turnEnd');
                 }
-            }, 800);
+            }, POPUP_ACTION_DELAY_MS);
         }, moveDuration + 300);
     }, [
         isDiceSettled,

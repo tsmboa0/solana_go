@@ -4,7 +4,7 @@
 // Lays out all 40 tiles in the Monopoly square formation.
 // ============================================================
 
-import { TILES } from '@/config/tiles';
+import { TILES } from '@/config/boardTiles';
 import { TILE_LAYOUTS } from '@/utils/boardLayout';
 import { Tile } from './Tile';
 
@@ -13,7 +13,7 @@ export function TileGroup() {
         <group>
             {TILES.map((tile, index) => (
                 <Tile
-                    key={tile.id}
+                    key={tile.tile_index}
                     tile={tile}
                     layout={TILE_LAYOUTS[index]}
                 />

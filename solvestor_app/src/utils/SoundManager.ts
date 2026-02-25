@@ -9,7 +9,7 @@
 import { SOUND_BGM_VOLUME, SOUND_SFX_VOLUME, SOUND_ENABLED } from '@/config/game';
 
 // Import asset URLs via Vite
-import citySoundUrl from '@/assets/sounds/city-sound.mp3';
+import citySoundUrl from '@/assets/sounds/city-sound.wav';
 import goSoundUrl from '@/assets/sounds/go-sound.mp3';
 import payRentUrl from '@/assets/sounds/pay-rent.mp3';
 import tokenStepUrl from '@/assets/sounds/token-step.wav';

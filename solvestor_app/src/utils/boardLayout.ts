@@ -47,9 +47,6 @@ export function computeBoardLayout(): TileLayout[] {
         let x = 0;
         let z = 0;
         let rotation = 0;
-        // 1 = header at local -Z (default), -1 = flip header to local +Z
-        // Left & right columns need flipping so headers always face the board center
-        let contentFlip: 1 | -1 = 1;
 
         if (i === 0) {
             // Bottom-right corner
@@ -66,14 +63,13 @@ export function computeBoardLayout(): TileLayout[] {
             // Bottom-left corner
             x = -boardHalf;
             z = boardHalf;
-            rotation = Math.PI / 2;
+            rotation = -Math.PI / 2;
         } else if (i > 10 && i < 20) {
             // Left column — bottom to top
             const offset = CORNER_TILE_SIZE / 2 + TILE_WIDTH / 2 + (i - 11) * TILE_WIDTH;
             x = -boardHalf;
             z = boardHalf - offset;
-            rotation = Math.PI / 2;
-            contentFlip = -1;
+            rotation = -Math.PI / 2;
         } else if (i === 20) {
             // Top-left corner
             x = -boardHalf;
@@ -89,21 +85,19 @@ export function computeBoardLayout(): TileLayout[] {
             // Top-right corner
             x = boardHalf;
             z = -boardHalf;
-            rotation = -Math.PI / 2;
+            rotation = Math.PI / 2;
         } else if (i > 30 && i < 40) {
             // Right column — top to bottom
             const offset = CORNER_TILE_SIZE / 2 + TILE_WIDTH / 2 + (i - 31) * TILE_WIDTH;
             x = boardHalf;
             z = -boardHalf + offset;
-            rotation = -Math.PI / 2;
-            contentFlip = -1;
+            rotation = Math.PI / 2;
         }
 
         layouts.push({
             position: [x, 0, z],
             rotation,
             isCorner,
-            contentFlip,
         });
     }
 

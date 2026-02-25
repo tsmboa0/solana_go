@@ -7,13 +7,13 @@
 
 import { useState, useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Text, RoundedBox } from '@react-three/drei';
+import { Text, RoundedBox, Image } from '@react-three/drei';
 import * as THREE from 'three';
-import type { TileDefinition, TileLayout } from '@/types/game';
+import type { Tile as TileDefinition, TileLayout } from '@/types/game';
 import { useUIStore } from '@/stores/useUIStore';
 import { useGameStore } from '@/stores/useGameStore';
 import { TILE_WIDTH, TILE_DEPTH, TILE_HEIGHT, CORNER_TILE_SIZE } from '@/config/game';
-import { MATERIALS, COLORS } from '@/config/theme';
+import { MATERIALS, COLORS, COLOR_GROUP_MAP } from '@/config/theme';
 import { lerp } from '@/utils/easing';
 
 interface TileProps {
@@ -31,7 +31,7 @@ export function Tile({ tile, layout }: TileProps) {
     const theme = useUIStore((s) => s.theme);
     const isDark = theme === 'dark';
 
-    const owner = ownedTiles[tile.id];
+    const owner = ownedTiles[tile.tile_index];
     const ownerPlayer = owner
         ? players.find((p) => p.id === owner)
         : null;
@@ -39,9 +39,6 @@ export function Tile({ tile, layout }: TileProps) {
     // Tile dimensions
     const width = layout.isCorner ? CORNER_TILE_SIZE : TILE_WIDTH;
     const depth = layout.isCorner ? CORNER_TILE_SIZE : TILE_DEPTH;
-
-    // Content Z-flip: 1 keeps header at -Z edge, -1 mirrors to +Z edge
-    const flip = layout.contentFlip;
 
     // Animate hover: gentle elevation only (no color flood)
     useFrame(() => {
@@ -68,11 +65,26 @@ export function Tile({ tile, layout }: TileProps) {
 
     // Label — truncate long names for non-corner tiles
     const labelText = useMemo(() => {
-        if (layout.isCorner) return tile.name;
-        return tile.name.length > 10
-            ? tile.name.substring(0, 9) + '…'
-            : tile.name;
-    }, [tile.name, layout.isCorner]);
+        if (layout.isCorner) return tile.project_name;
+        return tile.project_name.length > 10
+            ? tile.project_name.substring(0, 9) + '…'
+            : tile.project_name;
+    }, [tile.project_name, layout.isCorner]);
+
+    const getTileEmoji = () => {
+        if (tile.project_name === "Grant") return '💰';
+        if (tile.project_name === "Liquidation") return '📉';
+        if (tile.project_name === "Graveyard") return '🪦';
+        if (tile.project_name === "Send It") return '🚀';
+        if (tile.type === 'validator') return '💻';
+        if (tile.type === 'risk') return '🤖';
+        if (tile.type === 'chest') return '📦';
+        if (tile.project_name === "Governance") return '🗳️';
+        if (tile.type === 'chance' || tile.type === 'event') return '🎁';
+        return layout.isCorner ? '🏛️' : '❓';
+    };
+
+    const tileColorBand = tile.color_group ? COLOR_GROUP_MAP[tile.color_group] : '#8888aa';
 
     return (
         <group
@@ -99,7 +111,7 @@ export function Tile({ tile, layout }: TileProps) {
                 }}
                 onClick={(e) => {
                     e.stopPropagation();
-                    openBottomSheet(tile.id);
+                    openBottomSheet(tile.tile_index);
                 }}
             >
                 <meshStandardMaterial
@@ -110,14 +122,14 @@ export function Tile({ tile, layout }: TileProps) {
                     emissiveIntensity={0}
                 />
 
-                {/* Color band — skip on corner tiles, flipped by contentFlip on regular tiles */}
+                {/* Color band — skip on corner tiles */}
                 {!layout.isCorner && (
                     <mesh
-                        position={[0, TILE_HEIGHT / 2 + 0.001, flip * (-depth / 2 + depth * 0.12)]}
+                        position={[0, TILE_HEIGHT / 2 + 0.001, -depth / 2 + depth * 0.12]}
                         rotation={[-Math.PI / 2, 0, 0]}
                     >
                         <planeGeometry args={[width - 0.04, depth * 0.22]} />
-                        <meshBasicMaterial color={tile.colorBand} />
+                        <meshBasicMaterial color={tileColorBand} />
                     </mesh>
                 )}
 
@@ -129,29 +141,61 @@ export function Tile({ tile, layout }: TileProps) {
                     >
                         <planeGeometry args={[width + 0.02, depth + 0.02]} />
                         <meshBasicMaterial
-                            color={tile.colorBand}
+                            color={tileColorBand}
                             transparent
                             opacity={0.12}
                         />
                     </mesh>
                 )}
 
-                {/* Icon emoji — diagonal on corners, flipped on regular tiles */}
-                <Text
-                    position={[0, TILE_HEIGHT / 2 + 0.01, layout.isCorner ? -depth * 0.1 : flip * (-depth * 0.05)]}
-                    rotation={[-Math.PI / 2, 0, layout.isCorner ? Math.PI / 4 : 0]}
-                    fontSize={layout.isCorner ? 0.2 : 0.15}
-                    anchorX="center"
-                    anchorY="middle"
-                >
-                    {tile.icon}
-                </Text>
+                {/* Icon emoji — shifted into the corner on corner tiles */}
+                {tile.image_url ? (
+                    <Image
+                        url={tile.image_url}
+                        position={[
+                            layout.isCorner
+                                ? (tile.project_name === "Send It" ? -depth * 0.15 : -depth * 0.08)
+                                : 0,
+                            TILE_HEIGHT / 2 + 0.01,
+                            layout.isCorner
+                                ? (tile.project_name === "Send It" ? -depth * 0.15 : -depth * 0.08)
+                                : -depth * 0.05
+                        ]}
+                        rotation={[-Math.PI / 2, 0, layout.isCorner ? Math.PI / 4 : 0]}
+                        scale={layout.isCorner ? [0.35, 0.35] : [0.25, 0.25]}
+                        transparent
+                    />
+                ) : (
+                    <Text
+                        position={[
+                            layout.isCorner ? -depth * 0.08 : 0,
+                            TILE_HEIGHT / 2 + 0.01,
+                            layout.isCorner ? -depth * 0.08 : -depth * 0.05
+                        ]}
+                        rotation={[-Math.PI / 2, 0, layout.isCorner ? Math.PI / 4 : 0]}
+                        fontSize={layout.isCorner ? 0.25 : 0.15}
+                        anchorX="center"
+                        anchorY="middle"
+                        color="#000000"
+                    >
+                        {getTileEmoji()}
+                    </Text>
+                )}
 
-                {/* Label text — diagonal on corners, flipped on regular tiles */}
+                {/* Label text — shifted downwards/inwards on corner tiles */}
                 <Text
-                    position={[0, TILE_HEIGHT / 2 + 0.01, layout.isCorner ? depth * 0.15 : flip * (depth * 0.2)]}
+                    position={[
+                        layout.isCorner
+                            ? (tile.project_name === "Send It" ? depth * 0.15 : depth * 0.08)
+                            : 0,
+                        TILE_HEIGHT / 2 + 0.01,
+                        layout.isCorner
+                            ? (tile.project_name === "Send It" ? depth * 0.15 : depth * 0.08)
+                            : depth * 0.2
+                    ]}
                     rotation={[-Math.PI / 2, 0, layout.isCorner ? Math.PI / 4 : 0]}
-                    fontSize={layout.isCorner ? 0.09 : 0.06}
+                    fontSize={layout.isCorner ? (tile.project_name === "Send It" ? 0.13 : 0.12) : 0.06}
+                    fontWeight={layout.isCorner ? "bold" : "normal"}
                     maxWidth={width - 0.08}
                     anchorX="center"
                     anchorY="middle"
@@ -161,17 +205,17 @@ export function Tile({ tile, layout }: TileProps) {
                     {labelText}
                 </Text>
 
-                {/* Price text (for buyable tiles) — flipped along with header */}
-                {tile.price !== null && (
+                {/* Price text (for buyable tiles) */}
+                {tile.is_ownable && tile.tile_function.action_type === 'ownable' && (
                     <Text
-                        position={[0, TILE_HEIGHT / 2 + 0.01, flip * (depth * 0.33)]}
+                        position={[0, TILE_HEIGHT / 2 + 0.01, depth * 0.33]}
                         rotation={[-Math.PI / 2, 0, 0]}
                         fontSize={0.045}
                         anchorX="center"
                         anchorY="middle"
                         color={COLORS.textSecondary}
                     >
-                        {`$${tile.price.toLocaleString()}`}
+                        {`$${tile.tile_function.buy_price.toLocaleString()}`}
                     </Text>
                 )}
             </RoundedBox>
@@ -188,7 +232,7 @@ export function Tile({ tile, layout }: TileProps) {
                     32
                 ]} />
                 <meshBasicMaterial
-                    color={ownerPlayer ? ownerPlayer.color : (hovered ? tile.colorBand : '#ffffff')}
+                    color={ownerPlayer ? ownerPlayer.color : (hovered ? tileColorBand : '#ffffff')}
                     transparent
                     opacity={0}
                 />

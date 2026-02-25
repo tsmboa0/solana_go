@@ -48,14 +48,17 @@ export const CAMERA_ZOOM_IN_SPEED = 0.08;     // Speed when zooming closer to th
 export const CAMERA_ZOOM_OUT_SPEED = 0.06;    // Speed when pulling back out
 
 /** Starting / overview camera pose (single source of truth) */
-export const CAMERA_START_POSITION: [number, number, number] = [4.91, 5.50, 6.50];  //📷 Camera: [7.21, 7.32, 7.75]  | 
-export const CAMERA_START_TARGET: [number, number, number] = [0.59, -0.02, 1.07];   // 🎯 Target: [0.04, 0.80, 0.67]
+export const CAMERA_START_POSITION: [number, number, number] = [4.21, 7.11, 8.21];  //📷 Camera: [7.21, 7.32, 7.75]  | 
+export const CAMERA_START_TARGET: [number, number, number] = [-0.01, 1.17, 0.19];   // 🎯 Target: [0.04, 0.80, 0.67]
 
 /** Follow mode — offset from tile position [x, y, z] */
 export const CAMERA_FOLLOW_OFFSET: [number, number, number] = [1.5, 5.50, 2.2];
 
 /** Follow mode — distance behind the token in the travel direction */
 export const CAMERA_FOLLOW_DISTANCE = 3.5;
+
+/** Game Flow Constants */
+export const POPUP_ACTION_DELAY_MS = 2000; // Delay before showing modal after landing
 
 /** Follow mode — lateral offset toward board center (inward) */
 export const CAMERA_SIDE_OFFSET = 2.0;
