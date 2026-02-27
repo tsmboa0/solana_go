@@ -16,6 +16,7 @@ import { PortfolioModal } from '@/ui/PortfolioModal';
 import { TurnBanner } from '@/ui/TurnBanner';
 import { EndTurnButton } from '@/ui/EndTurnButton';
 import { RecenterButton } from '@/ui/RecenterButton';
+import { LeaveRoomButton } from '@/ui/LeaveRoomButton';
 import { GameLoadingOverlay } from '@/ui/GameLoadingOverlay';
 import { useUIStore } from '@/stores/useUIStore';
 import { useGameStore } from '@/stores/useGameStore';
@@ -60,6 +61,7 @@ export function GamePage() {
             <PortfolioModal />
             <EndTurnButton />
             <RecenterButton />
+            <LeaveRoomButton />
 
             {/* Loading splash — auto-fades after scene loads */}
             <GameLoadingOverlay />

@@ -2,11 +2,13 @@
 // Game Store — Solvestor (SWS)
 // ============================================================
 // Core game state: players, turns, ownership, economy.
+// Uses persist middleware to survive browser refresh.
 // Pure logic — no rendering concerns.
 // ============================================================
 
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
+import { persist } from 'zustand/middleware';
 import type { Player, GamePhase, DiceResult } from '@/types/game';
 import { INITIAL_PLAYERS } from '@/config/players';
 import { TILES } from '@/config/boardTiles';
@@ -45,157 +47,203 @@ interface GameState {
     cooldownDuration: number;
     /** Start cooldown timer */
     startCooldown: () => void;
+    /** Leave the current game: clears persisted state */
+    leaveGame: () => void;
 }
 
+const INITIAL_STATE = {
+    players: structuredClone(INITIAL_PLAYERS),
+    currentPlayerIndex: 0,
+    phase: 'waiting' as GamePhase,
+    lastDiceResult: null as DiceResult | null,
+    ownedTiles: {} as Record<number, string>,
+    turnNumber: 1,
+    movingTileIndex: null as number | null,
+    lastRollTime: null as number | null,
+    cooldownDuration: 10000,
+    isExploreMode: false,
+};
+
 export const useGameStore = create<GameState>()(
-    immer((set, get) => ({
-        players: structuredClone(INITIAL_PLAYERS),
-        currentPlayerIndex: 0,
-        phase: 'waiting' as GamePhase,
-        lastDiceResult: null,
-        ownedTiles: {},
-        turnNumber: 1,
-        movingTileIndex: null,
-        lastRollTime: null,
-        cooldownDuration: 10000, // 10 seconds
-        isExploreMode: false,
+    persist(
+        immer((set, get) => ({
+            ...structuredClone(INITIAL_STATE),
 
-        rollDice: () => {
-            const die1 = Math.floor(Math.random() * 6) + 1;
-            const die2 = Math.floor(Math.random() * 6) + 1;
-            const result: DiceResult = {
-                die1,
-                die2,
-                total: die1 + die2,
-                isDoubles: die1 === die2,
-            };
-            set((state) => {
-                state.lastDiceResult = result;
-                state.phase = 'rolling';
-            });
-            return result;
-        },
+            rollDice: () => {
+                const die1 = Math.floor(Math.random() * 6) + 1;
+                const die2 = Math.floor(Math.random() * 6) + 1;
+                const result: DiceResult = {
+                    die1,
+                    die2,
+                    total: die1 + die2,
+                    isDoubles: die1 === die2,
+                };
+                set((state) => {
+                    state.lastDiceResult = result;
+                    state.phase = 'rolling';
+                });
+                return result;
+            },
 
-        setPhase: (phase: GamePhase) => {
-            set((state) => {
-                state.phase = phase;
-            });
-        },
+            setPhase: (phase: GamePhase) => {
+                set((state) => {
+                    state.phase = phase;
+                });
+            },
 
-        movePlayer: (playerId: string, steps: number) => {
-            set((state) => {
-                const player = state.players.find((p) => p.id === playerId);
-                if (!player) return;
+            movePlayer: (playerId: string, steps: number) => {
+                set((state) => {
+                    const player = state.players.find((p) => p.id === playerId);
+                    if (!player) return;
 
-                const oldPosition = player.position;
-                const newPosition = (oldPosition + steps) % BOARD_SIZE;
+                    const oldPosition = player.position;
+                    const newPosition = (oldPosition + steps) % BOARD_SIZE;
 
-                // Check if player passed GO
-                if (newPosition < oldPosition) {
-                    player.balance += GO_SALARY;
-                }
+                    // Check if player passed GO
+                    if (newPosition < oldPosition) {
+                        player.balance += GO_SALARY;
+                    }
 
-                player.position = newPosition;
-                state.phase = 'moving';
-            });
-        },
+                    player.position = newPosition;
 
-        buyTile: (playerId: string, tileId: number) => {
-            set((state) => {
-                const player = state.players.find((p) => p.id === playerId);
-                const tile = TILES[tileId];
-                if (!player || !tile) return;
+                    // Only set phase to 'moving' for the active (human) player's roll.
+                    // CPU calls movePlayer directly — don't change phase for CPU moves.
+                    const isCPUPlayer = player.isCPU === true;
+                    if (!isCPUPlayer) {
+                        state.phase = 'moving';
+                    }
+                });
+            },
 
-                const fn = tile.tile_function;
-                if (!tile.is_ownable || fn.action_type !== 'ownable' || fn.buy_price === undefined) return;
+            buyTile: (playerId: string, tileId: number) => {
+                set((state) => {
+                    const player = state.players.find((p) => p.id === playerId);
+                    const tile = TILES[tileId];
+                    if (!player || !tile) return;
 
-                if (player.balance < fn.buy_price) return;
-                if (state.ownedTiles[tileId]) return;
+                    const fn = tile.tile_function;
+                    if (!tile.is_ownable || fn.action_type !== 'ownable' || fn.buy_price === undefined) return;
 
-                player.balance -= fn.buy_price;
-                player.ownedTiles.push(tileId);
-                state.ownedTiles[tileId] = playerId;
-            });
-        },
+                    if (player.balance < fn.buy_price) return;
+                    if (state.ownedTiles[tileId]) return;
 
-        payRent: (payerId: string, ownerId: string, amount: number) => {
-            set((state) => {
-                const payer = state.players.find((p) => p.id === payerId);
-                const owner = state.players.find((p) => p.id === ownerId);
-                if (!payer || !owner) return;
+                    player.balance -= fn.buy_price;
+                    player.ownedTiles.push(tileId);
+                    state.ownedTiles[tileId] = playerId;
+                });
+            },
 
-                payer.balance -= amount;
-                owner.balance += amount;
-            });
-        },
+            payRent: (payerId: string, ownerId: string, amount: number) => {
+                set((state) => {
+                    const payer = state.players.find((p) => p.id === payerId);
+                    const owner = state.players.find((p) => p.id === ownerId);
+                    if (!payer || !owner) return;
 
-        endTurn: () => {
-            set((state) => {
-                // In explore mode, DON'T switch players — human stays active,
-                // CPU operates independently on its own timer.
-                if (state.isExploreMode) {
-                    // Just reset phase for the human player
+                    payer.balance -= amount;
+                    owner.balance += amount;
+                });
+            },
+
+            endTurn: () => {
+                set((state) => {
+                    // In explore mode, DON'T switch players — human stays active,
+                    // CPU operates independently on its own timer.
+                    if (state.isExploreMode) {
+                        // Just reset phase for the human player
+                        state.phase = 'waiting';
+                        state.lastDiceResult = null;
+                        state.turnNumber += 1;
+                    } else {
+                        // Normal turn-based: switch to next player
+                        state.players[state.currentPlayerIndex].isActive = false;
+                        state.currentPlayerIndex =
+                            (state.currentPlayerIndex + 1) % state.players.length;
+                        state.players[state.currentPlayerIndex].isActive = true;
+                        state.phase = 'waiting';
+                        state.lastDiceResult = null;
+                        state.turnNumber += 1;
+                    }
+                });
+            },
+
+            getCurrentPlayer: () => {
+                const state = get();
+                return state.players[state.currentPlayerIndex];
+            },
+
+            setMovingTileIndex: (tileIndex: number | null) => {
+                set((state) => {
+                    state.movingTileIndex = tileIndex;
+                });
+            },
+
+            resetGame: () => {
+                set((state) => {
+                    state.players = structuredClone(INITIAL_PLAYERS);
+                    state.currentPlayerIndex = 0;
                     state.phase = 'waiting';
                     state.lastDiceResult = null;
-                    state.turnNumber += 1;
-                } else {
-                    // Normal turn-based: switch to next player
-                    state.players[state.currentPlayerIndex].isActive = false;
-                    state.currentPlayerIndex =
-                        (state.currentPlayerIndex + 1) % state.players.length;
-                    state.players[state.currentPlayerIndex].isActive = true;
+                    state.ownedTiles = {};
+                    state.turnNumber = 1;
+                    state.isExploreMode = false;
+                });
+            },
+
+            setupExploreMode: () => {
+                set((state) => {
+                    // Only reset if not already in explore mode (preserve state on refresh)
+                    if (state.isExploreMode) {
+                        // Already set up — just reset transient state
+                        state.phase = 'waiting';
+                        state.lastDiceResult = null;
+                        state.movingTileIndex = null;
+                        return;
+                    }
+
+                    state.players = structuredClone(INITIAL_PLAYERS);
+                    // Mark player 2 as CPU
+                    if (state.players.length >= 2) {
+                        state.players[1].isCPU = true;
+                        state.players[1].name = 'CPU Bot';
+                    }
+                    state.currentPlayerIndex = 0;
                     state.phase = 'waiting';
                     state.lastDiceResult = null;
-                    state.turnNumber += 1;
-                }
-            });
-        },
+                    state.ownedTiles = {};
+                    state.turnNumber = 1;
+                    state.lastRollTime = null;
+                    state.isExploreMode = true;
+                });
+            },
 
-        getCurrentPlayer: () => {
-            const state = get();
-            return state.players[state.currentPlayerIndex];
-        },
+            startCooldown: () => {
+                set({ lastRollTime: Date.now() });
+            },
 
-        setMovingTileIndex: (tileIndex: number | null) => {
-            set((state) => {
-                state.movingTileIndex = tileIndex;
-            });
-        },
-
-        resetGame: () => {
-            set((state) => {
-                state.players = structuredClone(INITIAL_PLAYERS);
-                state.currentPlayerIndex = 0;
-                state.phase = 'waiting';
-                state.lastDiceResult = null;
-                state.ownedTiles = {};
-                state.turnNumber = 1;
-                state.isExploreMode = false;
-            });
-        },
-
-        setupExploreMode: () => {
-            set((state) => {
-                state.players = structuredClone(INITIAL_PLAYERS);
-                // Mark player 2 as CPU
-                if (state.players.length >= 2) {
-                    state.players[1].isCPU = true;
-                    state.players[1].name = 'CPU Bot';
-                }
-                state.currentPlayerIndex = 0;
-                state.phase = 'waiting';
-                state.lastDiceResult = null;
-                state.ownedTiles = {};
-                state.turnNumber = 1;
-                state.lastRollTime = null;
-                state.isExploreMode = true;
-            });
-        },
-
-        startCooldown: () => {
-            set({ lastRollTime: Date.now() });
-        },
-    }))
+            leaveGame: () => {
+                set((state) => {
+                    // Reset everything to initial
+                    Object.assign(state, structuredClone(INITIAL_STATE));
+                });
+                // Clear the persisted storage
+                useGameStore.persist.clearStorage();
+            },
+        })),
+        {
+            name: 'solvestor-game-state',
+            // Only persist the meaningful game state, not transient UI state
+            partialize: (state) => ({
+                players: state.players,
+                currentPlayerIndex: state.currentPlayerIndex,
+                ownedTiles: state.ownedTiles,
+                turnNumber: state.turnNumber,
+                isExploreMode: state.isExploreMode,
+                cooldownDuration: state.cooldownDuration,
+                // Don't persist: phase, lastDiceResult, movingTileIndex, lastRollTime
+                // These are transient and should start fresh on reload
+            }),
+        }
+    )
 );
 
 // ============================================================

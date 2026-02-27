@@ -15,7 +15,6 @@ const AUTO_END_DELAY_MS = 600;
 export function useAutoEndTurn() {
     const phase = useGameStore((s) => s.phase);
     const endTurn = useGameStore((s) => s.endTurn);
-    const startCooldown = useGameStore((s) => s.startCooldown);
     const isExploreMode = useGameStore((s) => s.isExploreMode);
 
     const isProcessing = useRef(false);
@@ -29,8 +28,7 @@ export function useAutoEndTurn() {
         isProcessing.current = true;
 
         const timer = setTimeout(() => {
-            // Start cooldown timer, then reset phase to waiting
-            startCooldown();
+            // Just reset phase — cooldown already started when player clicked GO
             endTurn(); // In explore mode, this just resets phase — doesn't switch players
             isProcessing.current = false;
         }, AUTO_END_DELAY_MS);
@@ -39,5 +37,5 @@ export function useAutoEndTurn() {
             clearTimeout(timer);
             isProcessing.current = false;
         };
-    }, [phase, isExploreMode, endTurn, startCooldown]);
+    }, [phase, isExploreMode, endTurn]);
 }

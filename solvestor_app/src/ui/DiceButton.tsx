@@ -1,10 +1,9 @@
 // ============================================================
 // GO Button — Solvestor (SWS)
 // ============================================================
-// Big "GO" roll button at bottom center, inspired by
-// Monopoly GO's diamond-shaped action button.
-// Pulses when it's player's turn. Shows dice result after roll.
-// In Explore mode: shows circular cooldown countdown timer.
+// Clean, glassmorphic dice roll button at bottom center.
+// Shows GO when ready, circular cooldown ring when waiting,
+// and animated dice when rolling.
 // ============================================================
 
 import { useState, useEffect } from 'react';
@@ -17,115 +16,142 @@ import { soundManager } from '@/utils/SoundManager';
 export function DiceButton() {
     const phase = useGameStore((s) => s.phase);
     const isDiceAnimating = useUIStore((s) => s.isDiceAnimating);
-    const theme = useUIStore((s) => s.theme);
     const lastDiceResult = useGameStore((s) => s.lastDiceResult);
     const { performRoll } = useDiceRoll();
 
-    const isDark = theme === 'dark';
     const currentPlayer = useGameStore((s) => s.players[s.currentPlayerIndex]);
-    const isCPUTurn = currentPlayer?.isCPU === true;
     const isExploreMode = useGameStore((s) => s.isExploreMode);
+    const startCooldown = useGameStore((s) => s.startCooldown);
+
+    // In explore mode, the human is ALWAYS the active player
+    const isCPUTurn = !isExploreMode && currentPlayer?.isCPU === true;
 
     // Cooldown state
     const lastRollTime = useGameStore((s) => s.lastRollTime);
     const cooldownDuration = useGameStore((s) => s.cooldownDuration);
     const [cooldownRemaining, setCooldownRemaining] = useState(0);
 
-    // Update cooldown timer every 100ms
     useEffect(() => {
         if (!isExploreMode || !lastRollTime) {
             setCooldownRemaining(0);
             return;
         }
-
         const tick = () => {
             const elapsed = Date.now() - lastRollTime;
-            const remaining = Math.max(0, cooldownDuration - elapsed);
-            setCooldownRemaining(remaining);
+            setCooldownRemaining(Math.max(0, cooldownDuration - elapsed));
         };
         tick();
-
         const interval = setInterval(tick, 100);
         return () => clearInterval(interval);
     }, [lastRollTime, cooldownDuration, isExploreMode]);
 
     const isOnCooldown = isExploreMode && cooldownRemaining > 0;
-    const isAnimating = phase === 'rolling' || phase === 'moving' || isDiceAnimating;
-    const isBusy = phase !== 'waiting' || isDiceAnimating;
-    const canRoll = phase === 'waiting' && !isDiceAnimating && !isCPUTurn && !isOnCooldown;
 
-    // Cooldown progress (0 → 1 as cooldown completes)
-    const cooldownProgress = isOnCooldown ? 1 - (cooldownRemaining / cooldownDuration) : 1;
-    const cooldownSeconds = Math.ceil(cooldownRemaining / 1000);
+    // In explore mode: ignore phase (CPU can change it), only care about isDiceAnimating
+    const isAnimating = isExploreMode ? isDiceAnimating : (phase === 'rolling' || phase === 'moving' || isDiceAnimating);
+    const canRoll = isExploreMode ? !isOnCooldown && !isDiceAnimating : (phase === 'waiting' && !isDiceAnimating && !isCPUTurn && !isOnCooldown);
 
-    // SVG arc for circular countdown
-    const radius = 40;
+    // Cooldown ring
+    const radius = 44;
     const circumference = 2 * Math.PI * radius;
+    const cooldownProgress = isOnCooldown ? 1 - (cooldownRemaining / cooldownDuration) : 1;
     const strokeDashoffset = circumference * (1 - cooldownProgress);
+    const cooldownSeconds = Math.ceil(cooldownRemaining / 1000);
 
     const handleRollClick = async () => {
         if (!canRoll) return;
-
-        // Initialize Web Audio API on first user interaction 
         await soundManager.init();
         soundManager.playBGM();
-
+        if (isExploreMode) startCooldown();
         performRoll();
     };
 
-    // Don't render during CPU turn (hide completely so CPU token is visible)
+    // In turn-based mode only: hide during CPU turn
     if (isCPUTurn && !isOnCooldown) return null;
 
+    // Button size
+    const btnSize = 88;
+    const btnRadius = 22;
+
     return (
-        <div className="fixed bottom-4 left-0 right-0 z-50 flex flex-col items-center gap-3">
+        <div
+            style={{
+                position: 'fixed',
+                bottom: '20px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 50,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '10px',
+                pointerEvents: 'none',
+            }}
+        >
             {/* Dice result badge */}
             {lastDiceResult && !isAnimating && (
                 <motion.div
-                    initial={{ opacity: 0, y: 8, scale: 0.9 }}
+                    initial={{ opacity: 0, y: 6, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                    className={`
-            flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold font-mono
-            ${isDark
-                            ? 'bg-[rgba(16,16,32,0.8)] text-white/90 border border-white/10'
-                            : 'bg-white/90 text-gray-800 border border-gray-200 shadow-sm'
-                        }
-            backdrop-blur-md
-          `}
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '5px 14px',
+                        borderRadius: '20px',
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                        fontFamily: "'Inter', monospace",
+                        background: 'rgba(255,255,255,0.85)',
+                        border: '1px solid rgba(255,255,255,0.6)',
+                        backdropFilter: 'blur(12px)',
+                        boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+                        color: '#1f2937',
+                        pointerEvents: 'auto',
+                    }}
                 >
-                    <span className="text-base">🎲</span>
+                    <span>🎲</span>
                     <span>{lastDiceResult.die1}</span>
-                    <span className="text-xs opacity-50">+</span>
+                    <span style={{ opacity: 0.3 }}>+</span>
                     <span>{lastDiceResult.die2}</span>
-                    <span className="text-xs opacity-50">=</span>
-                    <span className="text-lg">{lastDiceResult.total}</span>
+                    <span style={{ opacity: 0.3 }}>=</span>
+                    <span style={{ fontWeight: 900 }}>{lastDiceResult.total}</span>
                 </motion.div>
             )}
 
-            {/* Big GO Button */}
+            {/* Main button */}
             <motion.button
                 onClick={handleRollClick}
                 disabled={!canRoll}
-                className="relative"
                 whileTap={canRoll ? { scale: 0.92 } : {}}
+                style={{
+                    position: 'relative',
+                    width: `${btnSize}px`,
+                    height: `${btnSize}px`,
+                    borderRadius: `${btnRadius}px`,
+                    border: 'none',
+                    cursor: canRoll ? 'pointer' : 'default',
+                    background: 'transparent',
+                    pointerEvents: 'auto',
+                    padding: 0,
+                }}
             >
-                {/* Outer glow pulse (when can roll) */}
+                {/* Pulsing glow ring (when ready) */}
                 {canRoll && (
                     <motion.div
-                        className="absolute inset-[-8px] rounded-[28px] bg-gradient-to-br from-purple-500/30 to-emerald-400/30"
-                        animate={{
-                            scale: [1, 1.08, 1],
-                            opacity: [0.5, 0.2, 0.5],
+                        style={{
+                            position: 'absolute',
+                            inset: '-6px',
+                            borderRadius: `${btnRadius + 6}px`,
+                            background: 'linear-gradient(135deg, rgba(153,69,255,0.25), rgba(20,241,149,0.25))',
+                            filter: 'blur(6px)',
                         }}
-                        transition={{
-                            duration: 1.5,
-                            repeat: Infinity,
-                            ease: 'easeInOut',
-                        }}
-                        style={{ filter: 'blur(8px)' }}
+                        animate={{ scale: [1, 1.06, 1], opacity: [0.6, 0.25, 0.6] }}
+                        transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
                     />
                 )}
 
-                {/* Circular cooldown ring (explore mode only) */}
+                {/* Cooldown ring overlay */}
                 {isOnCooldown && (
                     <div
                         style={{
@@ -133,41 +159,39 @@ export function DiceButton() {
                             top: '50%',
                             left: '50%',
                             transform: 'translate(-50%, -50%)',
-                            width: '110px',
-                            height: '110px',
+                            width: `${btnSize + 16}px`,
+                            height: `${btnSize + 16}px`,
                             pointerEvents: 'none',
                         }}
                     >
                         <svg
-                            width="110"
-                            height="110"
-                            viewBox="0 0 110 110"
+                            width={btnSize + 16}
+                            height={btnSize + 16}
+                            viewBox={`0 0 ${btnSize + 16} ${btnSize + 16}`}
                             style={{ transform: 'rotate(-90deg)' }}
                         >
-                            {/* Background track */}
                             <circle
-                                cx="55"
-                                cy="55"
+                                cx={(btnSize + 16) / 2}
+                                cy={(btnSize + 16) / 2}
                                 r={radius}
                                 fill="none"
-                                stroke={isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}
-                                strokeWidth="4"
+                                stroke="rgba(0,0,0,0.06)"
+                                strokeWidth="3"
                             />
-                            {/* Progress arc */}
                             <circle
-                                cx="55"
-                                cy="55"
+                                cx={(btnSize + 16) / 2}
+                                cy={(btnSize + 16) / 2}
                                 r={radius}
                                 fill="none"
-                                stroke="url(#cooldownGradient)"
-                                strokeWidth="4"
+                                stroke="url(#cdGrad)"
+                                strokeWidth="3"
                                 strokeLinecap="round"
                                 strokeDasharray={circumference}
                                 strokeDashoffset={strokeDashoffset}
                                 style={{ transition: 'stroke-dashoffset 0.1s linear' }}
                             />
                             <defs>
-                                <linearGradient id="cooldownGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <linearGradient id="cdGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                                     <stop offset="0%" stopColor="#9945FF" />
                                     <stop offset="100%" stopColor="#14F195" />
                                 </linearGradient>
@@ -176,91 +200,93 @@ export function DiceButton() {
                     </div>
                 )}
 
-                {/* Button body — diamond-inspired rounded rectangle */}
+                {/* Glass button body */}
                 <div
-                    className={`
-            relative w-[100px] h-[72px] rounded-[20px] flex items-center justify-center
-            overflow-hidden
-            transition-all duration-200
-            ${canRoll
-                            ? 'shadow-xl'
-                            : 'opacity-50'
-                        }
-          `}
                     style={{
+                        position: 'relative',
+                        width: '100%',
+                        height: '100%',
+                        borderRadius: `${btnRadius}px`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        overflow: 'hidden',
                         background: canRoll
                             ? 'linear-gradient(135deg, #9945FF 0%, #7B3FE4 50%, #14F195 100%)'
-                            : isDark
-                                ? 'rgba(60,60,80,0.6)'
-                                : 'rgba(180,180,200,0.6)',
+                            : 'rgba(255,255,255,0.5)',
+                        border: canRoll
+                            ? '1px solid rgba(255,255,255,0.3)'
+                            : '1px solid rgba(255,255,255,0.5)',
+                        backdropFilter: canRoll ? 'none' : 'blur(16px)',
+                        WebkitBackdropFilter: canRoll ? 'none' : 'blur(16px)',
                         boxShadow: canRoll
-                            ? '0 8px 30px rgba(153, 69, 255, 0.4), 0 2px 8px rgba(20, 241, 149, 0.2)'
-                            : 'none',
+                            ? '0 6px 24px rgba(153,69,255,0.35), 0 2px 8px rgba(20,241,149,0.15)'
+                            : '0 2px 12px rgba(0,0,0,0.06)',
+                        transition: 'all 0.3s ease',
                     }}
                 >
-                    {/* Inner highlight */}
+                    {/* Top highlight */}
                     <div
-                        className="absolute top-0 left-0 right-0 h-[40%] rounded-t-[20px]"
                         style={{
-                            background:
-                                'linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0) 100%)',
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            height: '45%',
+                            borderRadius: `${btnRadius}px ${btnRadius}px 0 0`,
+                            background: 'linear-gradient(180deg, rgba(255,255,255,0.3) 0%, transparent 100%)',
+                            pointerEvents: 'none',
                         }}
                     />
 
-                    {/* Button text */}
+                    {/* Content */}
                     {isAnimating ? (
                         <motion.div
-                            className="relative flex items-center gap-1.5"
-                            animate={{ opacity: [1, 0.5, 1] }}
-                            transition={{ duration: 0.8, repeat: Infinity }}
+                            animate={{ rotate: [0, 15, -15, 0] }}
+                            transition={{ duration: 0.5, repeat: Infinity }}
+                            style={{ fontSize: '1.8rem', position: 'relative' }}
                         >
-                            <span className="text-xl">🎲</span>
-                            <span className="text-xl">🎲</span>
+                            🎲
                         </motion.div>
                     ) : isOnCooldown ? (
-                        /* Cooldown countdown display */
-                        <div className="relative flex flex-col items-center">
-                            <span
+                        <div style={{ position: 'relative', textAlign: 'center' }}>
+                            <div
                                 style={{
-                                    color: '#fff',
+                                    fontSize: '1.6rem',
                                     fontWeight: 900,
-                                    fontSize: '1.4rem',
+                                    fontFamily: "'Inter', monospace",
+                                    color: '#6b6b80',
                                     lineHeight: 1,
-                                    fontFamily: 'monospace',
-                                    opacity: 0.9,
                                 }}
                             >
                                 {cooldownSeconds}
-                            </span>
-                            <span
+                            </div>
+                            <div
                                 style={{
-                                    color: 'rgba(255,255,255,0.5)',
-                                    fontSize: '0.55rem',
-                                    fontWeight: 600,
-                                    letterSpacing: '0.08em',
+                                    fontSize: '0.5rem',
+                                    fontWeight: 700,
+                                    color: '#9a9ab0',
+                                    letterSpacing: '0.1em',
                                     marginTop: '2px',
                                 }}
                             >
-                                COOLDOWN
-                            </span>
+                                WAIT
+                            </div>
                         </div>
-                    ) : isBusy ? (
-                        /* Busy (action phase, etc.) */
-                        <motion.div
-                            className="relative flex items-center gap-1.5"
-                            animate={{ opacity: [1, 0.5, 1] }}
-                            transition={{ duration: 0.8, repeat: Infinity }}
-                        >
-                            <span className="text-base" style={{ opacity: 0.7 }}>⏳</span>
-                        </motion.div>
                     ) : (
-                        <div className="relative flex flex-col items-center">
-                            <span className="text-white font-black text-2xl tracking-wider leading-none">
+                        <div style={{ position: 'relative', textAlign: 'center' }}>
+                            <div
+                                style={{
+                                    fontSize: '1.6rem',
+                                    fontWeight: 900,
+                                    fontFamily: "'Inter', sans-serif",
+                                    color: '#fff',
+                                    letterSpacing: '0.08em',
+                                    lineHeight: 1,
+                                    textShadow: '0 1px 4px rgba(0,0,0,0.15)',
+                                }}
+                            >
                                 GO
-                            </span>
-                            <div className="flex items-center gap-0.5 mt-0.5">
-                                <span className="text-white/70 text-[10px]">◀</span>
-                                <span className="text-white/70 text-[10px]">▶</span>
                             </div>
                         </div>
                     )}
