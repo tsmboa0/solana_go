@@ -10,7 +10,6 @@ import { BN } from '@coral-xyz/anchor';
 import {
     PublicKey,
     Transaction,
-    LAMPORTS_PER_SOL,
 } from '@solana/web3.js';
 import type { AnchorWallet } from '@solana/wallet-adapter-react';
 import {
@@ -23,7 +22,6 @@ import {
     deriveEscrowPDA,
     getValidatorRemainingAccounts,
     shortenPubkey,
-    lamportsToSol,
 } from '@/anchor/setup';
 
 // ─── Types ───────────────────────────────────────────────────

@@ -100,10 +100,9 @@ export function useTileActions() {
     }, [closePopup, setPhase]);
 
 
-    const executeAction = useCallback((actionId: string, tileId: number, input?: any) => {
+    const executeAction = useCallback((actionId: string, tileId: number) => {
         const tile = TILES[tileId];
         if (!tile) return;
-        const player = getCurrentPlayer();
         const action = tile.available_actions?.find(a => a.id === actionId);
 
         if (!action) {

@@ -12,8 +12,7 @@ import { useAnchorWallet } from '@solana/wallet-adapter-react';
 import { useBlockchainStore } from '@/stores/useBlockchainStore';
 import type { OnChainGame, TransactionStep } from '@/stores/useBlockchainStore';
 import { CreateRoomModal } from '@/ui/CreateRoomModal';
-import { lamportsToSol, shortenPubkey } from '@/anchor/setup';
-import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
+import { lamportsToSol } from '@/anchor/setup';
 
 // ─── Status Helper ───────────────────────────────────────────
 

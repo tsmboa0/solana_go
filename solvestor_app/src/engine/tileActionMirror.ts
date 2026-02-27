@@ -29,7 +29,6 @@ import {
     CHEST_TILES,
     CHANCE_TILES,
     SCHOOL_TILES,
-    RPC_TILES,
     DEFAULT_PUBKEY,
 } from '@/config/onChainConstants';
 
@@ -105,7 +104,6 @@ function applyChanceCard(
         }
         case 4: {
             // Network Upgrade — advance to nearest RPC
-            const pos = 0; // Will be overridden by caller's position
             // We handle nearest RPC calculation in the wrapper
             return {
                 balanceChange: 0,

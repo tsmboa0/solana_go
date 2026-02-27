@@ -7,7 +7,6 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { shortenPubkey } from '@/anchor/setup';
 import type { PublicKey } from '@solana/web3.js';
 
 interface Props {
@@ -20,7 +19,6 @@ interface Props {
 export function WaitingOverlay({ playerCount, maxPlayers, gamePDA, roomCode }: Props) {
     const [copied, setCopied] = useState(false);
 
-    const shareUrl = `${window.location.origin}/lobby`;
     const fullRoomCode = gamePDA.toBase58();
 
     const handleCopy = async () => {

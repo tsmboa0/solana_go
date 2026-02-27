@@ -1,73 +1,70 @@
-# React + TypeScript + Vite
+# Solana Go! React App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The Solana Go! React web application is the frontend client for the Solana Go! game. It combines a rich, interactive 3D board (rendered with Three.js / React Three Fiber) with real-time Solana blockchain integrations.
 
-Currently, two official plugins are available:
+The app is specifically designed to abstract away blockchain friction using **MagicBlock Ephemeral Rollups** and **Session Keys**, offering a Web2-like multiplayer experience while remaining fully on-chain.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Architecture
 
-## React Compiler
+The frontend acts as an optimistic orchestrator. It renders 3D animations immediately using a local game engine, while concurrently syncing with the Ephemeral Rollup (ER) in the background.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```mermaid
+sequenceDiagram
+    participant User
+    participant ReactUI as React UI & 3D Engine
+    participant Mirror as TileAction Mirror (Optimistic)
+    participant SDK as Gum SDK (Session Keys)
+    participant ER as Ephemeral Rollup (WSS/RPC)
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+    User->>ReactUI: Click "Roll Dice"
+    ReactUI->>SDK: rollDice() -> sign with Session Key
+    SDK->>ER: Send TX (No popup)
+    
+    %% VRF Callback received asynchronously via WebSockets
+    ER-->>ReactUI: WebSocket: PlayerState changed (Dice Result)
+    ReactUI->>ReactUI: Animate 3D Token Movement
+    
+    ReactUI->>Mirror: predictTileAction(tile_index, player_state, dice_result)
+    Mirror-->>ReactUI: Returns TileActionResult (Balance changes, effects)
+    ReactUI->>ReactUI: Show Confetti, Update UI Balance Instantly
+    
+    ReactUI->>SDK: performTileAction() -> sign with Session Key
+    SDK->>ER: Fire & Forget TX (No popup)
+    
+    %% Other players
+    ER-->>ReactUI: WebSocket: Remote PlayerState changed
+    ReactUI->>ReactUI: Silently animate remote tokens & update remote balances
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Core Modules
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### 1. Connection & Session Management
+- **`useSessionKey.ts`**: The backbone of the Web2-like UX. When a player readies up, this hook generates a temporary `Keypair` derived from their public key, funds it, and asks the user to sign *once* with their main wallet to authorize it as a delegate. All subsequent game transactions (`rollDice`, `buyProperty`) are signed by this temporary key in the background.
+- **`useBlockchainStore.ts`**: Manages WebSockets (`onAccountChange`) for both L1 and ER connections. It deduplicates active games in the lobby and subscribes to the current `GameState` and `PlayerState` PDAs to keep the UI in perfect sync with the chain.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+### 2. Gameplay Actions
+- **`useGameActions.ts`**: Exposes the core instructions (`rollDice`, `buyProperty`, `performTileAction`, `endGame`).
+- These actions construct the Anchor CPI calls and pass them to the `useSessionKey` hook to be dispatched over the Ephemeral RPC without ever prompting the user's wallet.
+
+### 3. The Optimistic Engine
+To prevent UI lag while waiting for ER confirmations (even though they are fast), Solvestor uses an optimistic engine:
+- **`tileActionMirror.ts`**: A pure TypeScript replication of the Rust `perform_tile_action.rs` contract. When a player lands on a tile, the frontend feeds the local state into this mirror. It instantly returns the predicted state changes (e.g., `-200 USDC` for a Tax tile), allowing the UI to show floating text and update the HUD without waiting for the network.
+- **Fire-and-Forget**: The UI dispatches custom events (e.g., `solvestor:performTileAction`) which trigger the actual transaction in the background, knowing it will succeed exactly as the mirror predicted.
+
+### 4. 3D Scene & Rendering
+- **`GameScene.tsx` & `PlayerToken.tsx`**: Renders the monopoly board. Uses `framer-motion-3d` for smooth token movement along predefined paths.
+- **`useRemotePlayerSync.ts`**: Listens for property and position changes from other players via the WebSocket subscriptions and quietly updates their 3D token representations on the local client's screen.
+
+## Game Modes
+
+| Mode | Description | Networking |
+| --- | --- | --- |
+| **Explore** | Single-player sandbox mode for testing the board visually. CPU bots take automatic turns. | Local State Only (Zustand) |
+| **Beginner** | The live, on-chain Multiplayer mode. Connects to the MagicBlock devnet ER cluster. Requires wallet and session keys. | Ephemeral Rollup + L1 Escrow |
+
+## UI Overlays
+
+The game extensively uses floating overlays (`z-index` staging) above the 3D canvas:
+1. **`SessionSetupOverlay`**: The critical UI that prompts the user to "Activate Session" before they can take their first turn, bridging the gap between L1 connection and ER gameplay.
+2. **`TileActionPopup`**: A glassmorphism modal that appears when an action requires user input (e.g., choosing to buy a Privacy Shield or staking in DeFi) or when a Chance/Chest card is drawn.
+3. **`WaitingOverlay`**: Blocks the screen while the game waits for `GameState.playerCount == GameState.maxPlayers` to automatically start.

@@ -63,7 +63,6 @@ export function useDiceRoll() {
     const ownedTiles = useGameStore((s) => s.ownedTiles);
 
     const isBeginnerMode = useGameStore((s) => s.isBeginnerMode);
-    const isExploreMode = useGameStore((s) => s.isExploreMode);
     const currentPlayerState = useBlockchainStore((s) => s.currentPlayerState);
 
     const showCoinEffect = useCoinConfetti((s) => s.showCoinEffect);

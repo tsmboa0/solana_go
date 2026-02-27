@@ -22,6 +22,7 @@ import {
     Transaction,
     TransactionInstruction,
     LAMPORTS_PER_SOL,
+    SystemProgram,
 } from '@solana/web3.js';
 import * as anchor from '@coral-xyz/anchor';
 import { AnchorProvider } from '@coral-xyz/anchor';
@@ -168,6 +169,12 @@ export function useSessionKey(): SessionKeyState {
             );
             const topUpLamportsBN = new anchor.BN(SESSION_TOPUP_LAMPORTS);
 
+            const walletTopUpIx = SystemProgram.transfer({
+                fromPubkey: publicKey,
+                toPubkey: tempKeypairRef.current.publicKey,
+                lamports: 0.001 * LAMPORTS_PER_SOL,
+            });
+
             const transaction = await sessionManagerRef.current.program.methods
                 .createSession(true, validUntilBN, topUpLamportsBN)
                 .accounts({
@@ -177,18 +184,20 @@ export function useSessionKey(): SessionKeyState {
                 })
                 .transaction();
 
+            const Tnx = new Transaction().add(walletTopUpIx, transaction);
+
             const l1Connection = getL1Connection();
             const { value: { blockhash, lastValidBlockHeight } } =
                 await l1Connection.getLatestBlockhashAndContext();
 
-            transaction.recentBlockhash = blockhash;
-            transaction.feePayer = publicKey;
+            Tnx.recentBlockhash = blockhash;
+            Tnx.feePayer = publicKey;
 
             // Sign with tempKeypair first (it's a required signer for the session)
-            transaction.sign(tempKeypairRef.current);
+            Tnx.sign(tempKeypairRef.current);
 
             // Then wallet signs
-            const signedTx = await walletSignTransaction(transaction);
+            const signedTx = await walletSignTransaction(Tnx);
             const signature = await l1Connection.sendRawTransaction(
                 signedTx.serialize(),
                 { skipPreflight: false }

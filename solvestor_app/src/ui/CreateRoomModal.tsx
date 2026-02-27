@@ -11,7 +11,6 @@ import { useNavigate } from 'react-router-dom';
 import { useAnchorWallet } from '@solana/wallet-adapter-react';
 import { useBlockchainStore } from '@/stores/useBlockchainStore';
 import type { TransactionStep } from '@/stores/useBlockchainStore';
-import { lamportsToSol } from '@/anchor/setup';
 
 // ─── Constants for Beginner Mode ─────────────────────────────
 
