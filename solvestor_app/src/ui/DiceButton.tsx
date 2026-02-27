@@ -4,8 +4,10 @@
 // Big "GO" roll button at bottom center, inspired by
 // Monopoly GO's diamond-shaped action button.
 // Pulses when it's player's turn. Shows dice result after roll.
+// In Explore mode: shows circular cooldown countdown timer.
 // ============================================================
 
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useGameStore } from '@/stores/useGameStore';
 import { useUIStore } from '@/stores/useUIStore';
@@ -20,9 +22,46 @@ export function DiceButton() {
     const { performRoll } = useDiceRoll();
 
     const isDark = theme === 'dark';
-    const canRoll = phase === 'waiting' && !isDiceAnimating;
-    const isAnimating =
-        phase === 'rolling' || phase === 'moving' || isDiceAnimating;
+    const currentPlayer = useGameStore((s) => s.players[s.currentPlayerIndex]);
+    const isCPUTurn = currentPlayer?.isCPU === true;
+    const isExploreMode = useGameStore((s) => s.isExploreMode);
+
+    // Cooldown state
+    const lastRollTime = useGameStore((s) => s.lastRollTime);
+    const cooldownDuration = useGameStore((s) => s.cooldownDuration);
+    const [cooldownRemaining, setCooldownRemaining] = useState(0);
+
+    // Update cooldown timer every 100ms
+    useEffect(() => {
+        if (!isExploreMode || !lastRollTime) {
+            setCooldownRemaining(0);
+            return;
+        }
+
+        const tick = () => {
+            const elapsed = Date.now() - lastRollTime;
+            const remaining = Math.max(0, cooldownDuration - elapsed);
+            setCooldownRemaining(remaining);
+        };
+        tick();
+
+        const interval = setInterval(tick, 100);
+        return () => clearInterval(interval);
+    }, [lastRollTime, cooldownDuration, isExploreMode]);
+
+    const isOnCooldown = isExploreMode && cooldownRemaining > 0;
+    const isAnimating = phase === 'rolling' || phase === 'moving' || isDiceAnimating;
+    const isBusy = phase !== 'waiting' || isDiceAnimating;
+    const canRoll = phase === 'waiting' && !isDiceAnimating && !isCPUTurn && !isOnCooldown;
+
+    // Cooldown progress (0 → 1 as cooldown completes)
+    const cooldownProgress = isOnCooldown ? 1 - (cooldownRemaining / cooldownDuration) : 1;
+    const cooldownSeconds = Math.ceil(cooldownRemaining / 1000);
+
+    // SVG arc for circular countdown
+    const radius = 40;
+    const circumference = 2 * Math.PI * radius;
+    const strokeDashoffset = circumference * (1 - cooldownProgress);
 
     const handleRollClick = async () => {
         if (!canRoll) return;
@@ -33,6 +72,9 @@ export function DiceButton() {
 
         performRoll();
     };
+
+    // Don't render during CPU turn (hide completely so CPU token is visible)
+    if (isCPUTurn && !isOnCooldown) return null;
 
     return (
         <div className="fixed bottom-4 left-0 right-0 z-50 flex flex-col items-center gap-3">
@@ -83,6 +125,57 @@ export function DiceButton() {
                     />
                 )}
 
+                {/* Circular cooldown ring (explore mode only) */}
+                {isOnCooldown && (
+                    <div
+                        style={{
+                            position: 'absolute',
+                            top: '50%',
+                            left: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            width: '110px',
+                            height: '110px',
+                            pointerEvents: 'none',
+                        }}
+                    >
+                        <svg
+                            width="110"
+                            height="110"
+                            viewBox="0 0 110 110"
+                            style={{ transform: 'rotate(-90deg)' }}
+                        >
+                            {/* Background track */}
+                            <circle
+                                cx="55"
+                                cy="55"
+                                r={radius}
+                                fill="none"
+                                stroke={isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}
+                                strokeWidth="4"
+                            />
+                            {/* Progress arc */}
+                            <circle
+                                cx="55"
+                                cy="55"
+                                r={radius}
+                                fill="none"
+                                stroke="url(#cooldownGradient)"
+                                strokeWidth="4"
+                                strokeLinecap="round"
+                                strokeDasharray={circumference}
+                                strokeDashoffset={strokeDashoffset}
+                                style={{ transition: 'stroke-dashoffset 0.1s linear' }}
+                            />
+                            <defs>
+                                <linearGradient id="cooldownGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" stopColor="#9945FF" />
+                                    <stop offset="100%" stopColor="#14F195" />
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                    </div>
+                )}
+
                 {/* Button body — diamond-inspired rounded rectangle */}
                 <div
                     className={`
@@ -123,6 +216,42 @@ export function DiceButton() {
                         >
                             <span className="text-xl">🎲</span>
                             <span className="text-xl">🎲</span>
+                        </motion.div>
+                    ) : isOnCooldown ? (
+                        /* Cooldown countdown display */
+                        <div className="relative flex flex-col items-center">
+                            <span
+                                style={{
+                                    color: '#fff',
+                                    fontWeight: 900,
+                                    fontSize: '1.4rem',
+                                    lineHeight: 1,
+                                    fontFamily: 'monospace',
+                                    opacity: 0.9,
+                                }}
+                            >
+                                {cooldownSeconds}
+                            </span>
+                            <span
+                                style={{
+                                    color: 'rgba(255,255,255,0.5)',
+                                    fontSize: '0.55rem',
+                                    fontWeight: 600,
+                                    letterSpacing: '0.08em',
+                                    marginTop: '2px',
+                                }}
+                            >
+                                COOLDOWN
+                            </span>
+                        </div>
+                    ) : isBusy ? (
+                        /* Busy (action phase, etc.) */
+                        <motion.div
+                            className="relative flex items-center gap-1.5"
+                            animate={{ opacity: [1, 0.5, 1] }}
+                            transition={{ duration: 0.8, repeat: Infinity }}
+                        >
+                            <span className="text-base" style={{ opacity: 0.7 }}>⏳</span>
                         </motion.div>
                     ) : (
                         <div className="relative flex flex-col items-center">

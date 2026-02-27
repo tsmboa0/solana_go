@@ -3,6 +3,7 @@
 // ============================================================
 // Cinematic "Your Turn" / "Opponent's Turn" banner.
 // Slides in on turn change, auto-dismisses.
+// Completely disabled in Explore mode (async play, no turns).
 // ============================================================
 
 import { useEffect } from 'react';
@@ -19,14 +20,29 @@ export function TurnBanner() {
     const theme = useUIStore((s) => s.theme);
     const isDark = theme === 'dark';
 
-    // Show banner on turn change
+    const isCPUTurn = currentPlayer?.isCPU === true;
+    const isExploreMode = useGameStore((s) => s.isExploreMode);
+
+    // In explore mode: force-clear the banner if it was shown
+    // during the race between first render and setupExploreMode
     useEffect(() => {
+        if (isExploreMode && showTurnBanner) {
+            setShowTurnBanner(false);
+        }
+    }, [isExploreMode, showTurnBanner, setShowTurnBanner]);
+
+    // Show banner on turn change (only for turn-based modes)
+    useEffect(() => {
+        if (isCPUTurn || isExploreMode) return;
         setShowTurnBanner(true);
         const timer = setTimeout(() => {
             setShowTurnBanner(false);
         }, TURN_BANNER_DURATION * 1000);
         return () => clearTimeout(timer);
-    }, [turnNumber, setShowTurnBanner]);
+    }, [turnNumber, setShowTurnBanner, isCPUTurn, isExploreMode]);
+
+    // Don't render anything in explore mode
+    if (isExploreMode) return null;
 
     return (
         <AnimatePresence>

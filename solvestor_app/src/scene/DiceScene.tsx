@@ -307,7 +307,11 @@ export function DiceScene() {
     const players = useGameStore((s) => s.players);
     const currentPlayerIndex = useGameStore((s) => s.currentPlayerIndex);
 
-    const isRolling = phase === 'rolling' || isDiceAnimating;
+    // CPU guard: skip all dice physics/visuals for CPU players
+    const currentPlayer = players[currentPlayerIndex];
+    const isCPUTurn = currentPlayer?.isCPU === true;
+
+    const isRolling = !isCPUTurn && (phase === 'rolling' || isDiceAnimating);
     const die1Val = lastDiceResult?.die1 ?? 1;
     const die2Val = lastDiceResult?.die2 ?? 1;
 
@@ -339,7 +343,7 @@ export function DiceScene() {
     }, [isRolling, playerTileIndex]);
 
     // Dice should be visible when rolling or showing a result
-    const showDice = isRolling || !!lastDiceResult;
+    const showDice = !isCPUTurn && (isRolling || !!lastDiceResult);
 
     // Mark for throw when rolling transitions from false → true
     useEffect(() => {

@@ -39,8 +39,14 @@ export function useDiceRoll() {
     }, [rollDice, getCurrentPlayer, setDiceAnimating]);
 
     // 2. Watch for dice to settle (physics-based signal from DiceScene)
+    // Skip for CPU players — CPU has its own flow in useCPUPlayer
     useEffect(() => {
         if (!isDiceSettled || !pendingResult.current) return;
+
+        // Check if current player is CPU — if so, don't process
+        const currentState = useGameStore.getState();
+        const currentPlayer = currentState.players[currentState.currentPlayerIndex];
+        if (currentPlayer?.isCPU) return;
 
         const { playerId, total } = pendingResult.current;
         pendingResult.current = null;

@@ -24,6 +24,8 @@ interface GameState {
     movingTileIndex: number | null;
     /** Turn counter */
     turnNumber: number;
+    /** Whether the game is in explore mode (solo vs CPU) */
+    isExploreMode: boolean;
 
     // --- Actions ---
     rollDice: () => DiceResult;
@@ -35,6 +37,14 @@ interface GameState {
     getCurrentPlayer: () => Player;
     setMovingTileIndex: (tileIndex: number | null) => void;
     resetGame: () => void;
+    /** Set up explore mode: mark player 2 as CPU */
+    setupExploreMode: () => void;
+    /** Cooldown: timestamp of last roll for the human player */
+    lastRollTime: number | null;
+    /** Cooldown duration in ms */
+    cooldownDuration: number;
+    /** Start cooldown timer */
+    startCooldown: () => void;
 }
 
 export const useGameStore = create<GameState>()(
@@ -46,6 +56,9 @@ export const useGameStore = create<GameState>()(
         ownedTiles: {},
         turnNumber: 1,
         movingTileIndex: null,
+        lastRollTime: null,
+        cooldownDuration: 10000, // 10 seconds
+        isExploreMode: false,
 
         rollDice: () => {
             const die1 = Math.floor(Math.random() * 6) + 1;
@@ -118,19 +131,23 @@ export const useGameStore = create<GameState>()(
 
         endTurn: () => {
             set((state) => {
-                // Deactivate current player
-                state.players[state.currentPlayerIndex].isActive = false;
-
-                // Move to next player
-                state.currentPlayerIndex =
-                    (state.currentPlayerIndex + 1) % state.players.length;
-
-                // Activate new player
-                state.players[state.currentPlayerIndex].isActive = true;
-
-                state.phase = 'waiting';
-                state.lastDiceResult = null;
-                state.turnNumber += 1;
+                // In explore mode, DON'T switch players — human stays active,
+                // CPU operates independently on its own timer.
+                if (state.isExploreMode) {
+                    // Just reset phase for the human player
+                    state.phase = 'waiting';
+                    state.lastDiceResult = null;
+                    state.turnNumber += 1;
+                } else {
+                    // Normal turn-based: switch to next player
+                    state.players[state.currentPlayerIndex].isActive = false;
+                    state.currentPlayerIndex =
+                        (state.currentPlayerIndex + 1) % state.players.length;
+                    state.players[state.currentPlayerIndex].isActive = true;
+                    state.phase = 'waiting';
+                    state.lastDiceResult = null;
+                    state.turnNumber += 1;
+                }
             });
         },
 
@@ -153,7 +170,30 @@ export const useGameStore = create<GameState>()(
                 state.lastDiceResult = null;
                 state.ownedTiles = {};
                 state.turnNumber = 1;
+                state.isExploreMode = false;
             });
+        },
+
+        setupExploreMode: () => {
+            set((state) => {
+                state.players = structuredClone(INITIAL_PLAYERS);
+                // Mark player 2 as CPU
+                if (state.players.length >= 2) {
+                    state.players[1].isCPU = true;
+                    state.players[1].name = 'CPU Bot';
+                }
+                state.currentPlayerIndex = 0;
+                state.phase = 'waiting';
+                state.lastDiceResult = null;
+                state.ownedTiles = {};
+                state.turnNumber = 1;
+                state.lastRollTime = null;
+                state.isExploreMode = true;
+            });
+        },
+
+        startCooldown: () => {
+            set({ lastRollTime: Date.now() });
         },
     }))
 );

@@ -54,6 +54,10 @@ export function TileActionPopup() {
 
     if (!activePopup || !tile) return null;
 
+    // Don't show popup for CPU players — CPU auto-resolves
+    const isCPUTurn = currentPlayer?.isCPU === true;
+    if (isCPUTurn) return null;
+
     const fn = tile.tile_function as any; // Cast as any for easy prop access
     const tileType = tile.type;
     const tileColor = tile.color_group ? COLOR_GROUP_MAP[tile.color_group] : '#888';

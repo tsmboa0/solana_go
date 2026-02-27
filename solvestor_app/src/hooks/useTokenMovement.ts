@@ -30,6 +30,7 @@ interface TokenMovementState {
 export function useTokenMovement(
     playerPosition: number,
     isActivePlayer: boolean,
+    isCPU: boolean = false,
 ): TokenMovementState {
     const previousPosition = useRef(playerPosition);
     const [isMoving, setIsMoving] = useState(false);
@@ -61,17 +62,18 @@ export function useTokenMovement(
             setTimeout(() => {
                 const isFinalStep = i === steps.length - 1;
 
-                // Play audio synced with visual step landing.
-                // Hop animation `HOP_SPEED` is 8 (1/8 second = 125ms).
-                setTimeout(() => {
-                    if (isFinalStep) {
-                        soundManager.play('pay-rent');
-                    } else if (tileIndex === 0) {
-                        soundManager.play('go-sound');
-                    } else {
-                        soundManager.play('token-step');
-                    }
-                }, 125);
+                // Play audio synced with visual step landing (only for human players)
+                if (!isCPU) {
+                    setTimeout(() => {
+                        if (isFinalStep) {
+                            soundManager.play('pay-rent');
+                        } else if (tileIndex === 0) {
+                            soundManager.play('go-sound');
+                        } else {
+                            soundManager.play('token-step');
+                        }
+                    }, 125);
+                }
 
                 setCurrentStepTile(tileIndex);
                 setCurrentPosition(getWorldPosition(tileIndex));

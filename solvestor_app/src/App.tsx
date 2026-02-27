@@ -1,41 +1,25 @@
 // ============================================================
 // App — Solvestor (SWS)
 // ============================================================
-// Root component: 3D GameScene as background,
-// UI overlay components rendered on top.
+// Root component with client-side routing.
+// Landing → Mode Select → Lobby → Game
 // ============================================================
 
-import { GameScene } from '@/scene/GameScene';
-import { HUD } from '@/ui/HUD';
-import { BottomSheet } from '@/ui/BottomSheet';
-import { DiceButton } from '@/ui/DiceButton';
-import { TileActionPopup } from '@/ui/TileActionPopup';
-import { PortfolioModal } from '@/ui/PortfolioModal';
-import { TurnBanner } from '@/ui/TurnBanner';
-import { EndTurnButton } from '@/ui/EndTurnButton';
-import { RecenterButton } from '@/ui/RecenterButton';
-import { useUIStore } from '@/stores/useUIStore';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { LandingPage } from '@/pages/LandingPage';
+import { ModeSelectPage } from '@/pages/ModeSelectPage';
+import { LobbyPage } from '@/pages/LobbyPage';
+import { GamePage } from '@/pages/GamePage';
 
 export default function App() {
-  const theme = useUIStore((s) => s.theme);
-
   return (
-    <div
-      className={`w-full h-full no-select ${theme === 'dark' ? 'text-white' : 'text-gray-900'
-        }`}
-    >
-      {/* 3D Scene (full-screen background) */}
-      <GameScene />
-
-      {/* 2D UI Overlays */}
-      <HUD />
-      <DiceButton />
-      <TurnBanner />
-      <BottomSheet />
-      <TileActionPopup />
-      <PortfolioModal />
-      <EndTurnButton />
-      <RecenterButton />
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/select" element={<ModeSelectPage />} />
+        <Route path="/lobby" element={<LobbyPage />} />
+        <Route path="/game/:mode" element={<GamePage />} />
+      </Routes>
+    </BrowserRouter>
   );
 }

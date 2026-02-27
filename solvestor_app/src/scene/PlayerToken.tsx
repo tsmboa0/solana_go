@@ -32,6 +32,7 @@ export function PlayerToken({ player, index }: PlayerTokenProps) {
     const { currentPosition, isMoving } = useTokenMovement(
         player.position,
         player.isActive,
+        player.isCPU ?? false,
     );
 
     // Track hop animation progress

@@ -176,6 +176,8 @@ export interface Player {
     ownedTiles: number[];
     /** Whether it's this player's turn */
     isActive: boolean;
+    /** Whether this player is controlled by CPU (Explore mode) */
+    isCPU?: boolean;
 }
 
 /** Phases of a single turn */

@@ -34,11 +34,11 @@ describe("solvestor_program", () => {
   const providerEphemeralRollup = new anchor.AnchorProvider(
     new anchor.web3.Connection(
       process.env.EPHEMERAL_PROVIDER_ENDPOINT ||
-      "https://devnet-eu.magicblock.app/",
+      "https://devnet.magicblock.app/",
       {
         wsEndpoint:
           process.env.EPHEMERAL_WS_ENDPOINT ||
-          "wss://devnet-eu.magicblock.app/",
+          "wss://devnet.magicblock.app/",
       }
     ),
     anchor.Wallet.local()
@@ -206,7 +206,6 @@ describe("solvestor_program", () => {
 
   describe("1. Room Lifecycle (L1)", () => {
     it("Create room — inits game, player, escrow", async function () {
-      this.timeout(30000);
       const start = Date.now();
 
       let tx = await program.methods
@@ -220,20 +219,11 @@ describe("solvestor_program", () => {
         .accounts({
           creator: creator.publicKey,
         })
-        .transaction();
-
-      const txHash = await provider.sendAndConfirm(tx, [provider.wallet.payer]);
-
-      // const txHash = await sendAndConfirmTransaction(
-      //   provider.connection,
-      //   tx,
-      //   [provider.wallet.payer],
-      //   { skipPreflight: true, commitment: "confirmed" }
-      // );
+        .rpc({ skipPreflight: true })
 
       const duration = Date.now() - start;
       timings.push({ label: "create_room", layer: "L1", ms: duration });
-      console.log(`  ${duration}ms create_room tx: ${txHash}`);
+      console.log(`  ${duration}ms create_room tx: ${tx}`);
 
       // Verify GameState
       const gameState = await program.account.gameState.fetch(gamePDA);
@@ -282,10 +272,9 @@ describe("solvestor_program", () => {
     });
 
     it("Join room — player 2 joins, auto-starts (max_players=2)", async function () {
-      this.timeout(30000);
       const start = Date.now();
 
-      let tx = await program.methods
+      let txInstr = await program.methods
         .joinRoom()
         .accounts({
           user: player2Keypair.publicKey,
@@ -294,18 +283,16 @@ describe("solvestor_program", () => {
         })
         .transaction();
 
-      const txHash = await provider.sendAndConfirm(tx, [player2Keypair]);
-
-      // const txHash = await sendAndConfirmTransaction(
-      //   provider.connection,
-      //   tx,
-      //   [player2Keypair],
-      //   { skipPreflight: true, commitment: "confirmed" }
-      // );
+      let tx = await sendAndConfirmTransaction(
+        provider.connection,
+        txInstr,
+        [player2Keypair],
+        { skipPreflight: true, commitment: "confirmed" }
+      );
 
       const duration = Date.now() - start;
       timings.push({ label: "join_room", layer: "L1", ms: duration });
-      console.log(`  ${duration}ms join_room tx: ${txHash}`);
+      console.log(`  ${duration}ms join_room tx: ${tx}`);
 
       // Verify game state
       const gameState = await program.account.gameState.fetch(gamePDA);
@@ -338,7 +325,6 @@ describe("solvestor_program", () => {
 
   describe("2. Delegation to ER (L1)", () => {
     it("Delegate game state to ER", async function () {
-      this.timeout(30000);
       const start = Date.now();
 
       let tx = await program.methods
@@ -348,25 +334,14 @@ describe("solvestor_program", () => {
           game: gamePDA,
         })
         .remainingAccounts(getValidatorRemainingAccounts())
-        .transaction();
-
-      const txHash = await provider.sendAndConfirm(tx, [provider.wallet.payer]);
-
-      // const txHash = await sendAndConfirmTransaction(
-      //   provider.connection,
-      //   tx,
-      //   [provider.wallet.payer],
-      //   { skipPreflight: true, commitment: "confirmed" }
-      // );
+        .rpc({ skipPreflight: true });
 
       const duration = Date.now() - start;
       timings.push({ label: "delegate_game", layer: "L1", ms: duration });
-      console.log(`  ${duration}ms delegate_game tx: ${txHash}`);
-      await sleep(3000);
+      console.log(`  ${duration}ms delegate_game tx: ${tx}`);
     });
 
     it("Delegate creator player state to ER", async function () {
-      this.timeout(30000);
       const start = Date.now();
 
       let tx = await program.methods
@@ -376,16 +351,7 @@ describe("solvestor_program", () => {
           player: creatorPlayerPDA,
         })
         .remainingAccounts(getValidatorRemainingAccounts())
-        .transaction();
-
-      const txHash = await provider.sendAndConfirm(tx, [provider.wallet.payer]);
-
-      // const txHash = await sendAndConfirmTransaction(
-      //   provider.connection,
-      //   tx,
-      //   [provider.wallet.payer],
-      //   { skipPreflight: true, commitment: "confirmed" }
-      // );
+        .rpc({ skipPreflight: true });
 
       const duration = Date.now() - start;
       timings.push({
@@ -393,12 +359,10 @@ describe("solvestor_program", () => {
         layer: "L1",
         ms: duration,
       });
-      console.log(`  ${duration}ms delegate_player (creator) tx: ${txHash}`);
-      await sleep(3000);
+      console.log(`  ${duration}ms delegate_player (creator) tx: ${tx}`);
     });
 
     it("Delegate player 2 state to ER", async function () {
-      this.timeout(30000);
       const start = Date.now();
 
       let tx = await program.methods
@@ -410,14 +374,12 @@ describe("solvestor_program", () => {
         .remainingAccounts(getValidatorRemainingAccounts())
         .transaction();
 
-      const txHash = await provider.sendAndConfirm(tx, [player2Keypair]);
-
-      // const txHash = await sendAndConfirmTransaction(
-      //   provider.connection,
-      //   tx,
-      //   [player2Keypair],
-      //   { skipPreflight: true, commitment: "confirmed" }
-      // );
+      const txHash = await sendAndConfirmTransaction(
+        provider.connection,
+        tx,
+        [player2Keypair],
+        { skipPreflight: true, commitment: "confirmed" }
+      );
 
       const duration = Date.now() - start;
       timings.push({
@@ -436,7 +398,6 @@ describe("solvestor_program", () => {
 
   describe("3. Dice Rolling (ER + VRF)", () => {
     it("Roll dice for creator — VRF request + callback", async function () {
-      this.timeout(30000);
       const start = Date.now();
 
       // Build tx with ER program — explicitly pass oracleQueue (like React app)
@@ -449,31 +410,16 @@ describe("solvestor_program", () => {
           oracleQueue: ORACLE_QUEUE,
           sessionToken: null,
         })
-        .transaction();
-
-      const txHash = await sendOnER(tx, [provider.wallet.payer]);
+        .rpc({ skipPreflight: true });
 
       const duration = Date.now() - start;
       timings.push({ label: "roll_dice (p1)", layer: "ER+VRF", ms: duration });
-      console.log(`  ${duration}ms roll_dice tx: ${txHash}`);
+      console.log(`  ${duration}ms roll_dice tx: ${tx}`);
 
-      // Wait for VRF callback — poll with retries
-      console.log("  Waiting for VRF callback (up to 15s)...");
-
-      // Poll for VRF callback result
-      let playerState: any;
-      for (let i = 0; i < 5; i++) {
-        await sleep(3000);
-        playerState = await ephemeralProgram.account.playerState.fetch(
-          creatorPlayerPDA
-        );
-        console.log(`  Player state: ${JSON.stringify(playerState)}`);
-        if (playerState.lastDiceResult[0] > 0) break;
-        console.log(`  ...still waiting (${(i + 1) * 3}s)`);
-      }
-      if (playerState.lastDiceResult[0] === 0) {
-        console.log("  ⚠️  VRF callback not received yet");
-      }
+      const playerState = await ephemeralProgram.account.playerState.fetch(
+        creatorPlayerPDA
+      );
+      console.log(`  Player state 1: ${JSON.stringify(playerState)}`);
       console.log(
         `  Dice: [${playerState.lastDiceResult[0]}, ${playerState.lastDiceResult[1]}]`
       );
@@ -487,8 +433,6 @@ describe("solvestor_program", () => {
     });
 
     it("Perform tile action after landing (creator)", async function () {
-      this.timeout(30000);
-
 
       const playerState = await ephemeralProgram.account.playerState.fetch(
         creatorPlayerPDA
@@ -526,9 +470,6 @@ describe("solvestor_program", () => {
     });
 
     it("Buy property if on ownable unowned tile (creator)", async function () {
-      this.timeout(30000);
-
-
       const playerState = await ephemeralProgram.account.playerState.fetch(
         creatorPlayerPDA
       );
@@ -576,8 +517,6 @@ describe("solvestor_program", () => {
     });
 
     it("Roll dice for player 2", async function () {
-      this.timeout(30000);
-
       const start = Date.now();
       let tx = await ephemeralProgram.methods
         .rollDice(1)
@@ -590,7 +529,12 @@ describe("solvestor_program", () => {
         })
         .transaction();
 
-      const txHash = await sendOnER(tx, [player2Keypair]);
+      const txHash = await sendAndConfirmTransaction(
+        providerEphemeralRollup.connection,
+        tx,
+        [player2Keypair],
+        { skipPreflight: true, commitment: "confirmed" }
+      );
 
       const duration = Date.now() - start;
       timings.push({
@@ -600,13 +544,10 @@ describe("solvestor_program", () => {
       });
       console.log(`  ${duration}ms roll_dice (player2) tx: ${txHash}`);
 
-      console.log("  Waiting 5s for VRF callback...");
-      await sleep(5000);
-
-
       const p2State = await ephemeralProgram.account.playerState.fetch(
         player2PDA
       );
+      console.log(`  Player 2 state: ${JSON.stringify(p2State)}`);
       console.log(
         `  Player 2 dice: [${p2State.lastDiceResult[0]}, ${p2State.lastDiceResult[1]}]`
       );
@@ -615,9 +556,6 @@ describe("solvestor_program", () => {
     });
 
     it("Perform tile action for player 2", async function () {
-      this.timeout(30000);
-
-
       const p2State = await ephemeralProgram.account.playerState.fetch(
         player2PDA
       );
@@ -653,7 +591,6 @@ describe("solvestor_program", () => {
 
   describe("4. Additional Rounds (ER)", () => {
     it("Roll dice again after cooldown (round 2)", async function () {
-      this.timeout(60000);
 
       console.log("  Waiting 21s for cooldown...");
       await sleep(21000);
@@ -668,9 +605,7 @@ describe("solvestor_program", () => {
           oracleQueue: ORACLE_QUEUE,
           sessionToken: null,
         })
-        .transaction();
-
-      const txHash = await sendOnER(tx, [provider.wallet.payer]);
+        .rpc({ skipPreflight: true });
 
       const duration = Date.now() - start;
       timings.push({
@@ -678,14 +613,13 @@ describe("solvestor_program", () => {
         layer: "ER+VRF",
         ms: duration,
       });
-      console.log(`  ${duration}ms roll_dice (round 2) tx: ${txHash}`);
-
-      await sleep(5000);
+      console.log(`  ${duration}ms roll_dice (round 2) tx: ${tx}`);
 
       // Read from top-level ephemeralProgram
       const ps = await ephemeralProgram.account.playerState.fetch(
         creatorPlayerPDA
       );
+      console.log(`  Player1 state 2: ${JSON.stringify(ps)}`);
       console.log(
         `  Round 2 — dice: [${ps.lastDiceResult[0]}, ${ps.lastDiceResult[1]}]`
       );
@@ -696,8 +630,6 @@ describe("solvestor_program", () => {
     });
 
     it("Perform tile action with choose_action=true (Round 2)", async function () {
-      this.timeout(30000);
-
 
       const ps = await ephemeralProgram.account.playerState.fetch(
         creatorPlayerPDA
@@ -748,9 +680,6 @@ describe("solvestor_program", () => {
 
   describe("5. State Verification (ER)", () => {
     it("Verify game state consistency", async function () {
-      this.timeout(15000);
-
-
       const gs = await ephemeralProgram.account.gameState.fetch(gamePDA);
       expect(gs.isStarted).to.equal(true);
       expect(gs.isEnded).to.equal(false);
@@ -771,9 +700,6 @@ describe("solvestor_program", () => {
     });
 
     it("Verify both player states", async function () {
-      this.timeout(15000);
-
-
       const p1 = await ephemeralProgram.account.playerState.fetch(
         creatorPlayerPDA
       );
@@ -797,8 +723,6 @@ describe("solvestor_program", () => {
 
   describe("6. Leave Room (ER → L1)", () => {
     it("Player 2 leaves — commit + undelegate", async function () {
-      this.timeout(60000);
-
       const start = Date.now();
       let tx = await program.methods
         .leaveRoom()
@@ -827,8 +751,6 @@ describe("solvestor_program", () => {
           "  Commit tracking timed out (OK in some configs)"
         );
       }
-
-      await sleep(5000);
 
       // Verify on L1
       const p2State = await program.account.playerState.fetch(player2PDA);

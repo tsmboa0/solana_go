@@ -102,6 +102,10 @@ export function CameraController() {
     const setCameraDetached = useCameraStore((s) => s.setCameraDetached);
     const isCameraDetached = useCameraStore((s) => s.isCameraDetached);
 
+    // CPU guard: don't auto-follow camera for CPU players
+    const currentPlayer = players[currentPlayerIndex];
+    const isCPUTurn = currentPlayer?.isCPU === true;
+
     // --- Smooth interpolation targets (used in follow mode) ---
     const targetPosition = useRef(OVERVIEW_POSITION.clone());
     const targetLookAt = useRef(BOARD_CENTER.clone());
@@ -144,7 +148,7 @@ export function CameraController() {
 
     // ─── Follow token tile-by-tile during movement ───
     useEffect(() => {
-        if (movingTileIndex === null || phase !== 'moving') return;
+        if (movingTileIndex === null || phase !== 'moving' || isCPUTurn) return;
 
         const layout = TILE_LAYOUTS[movingTileIndex];
         if (!layout) return;
@@ -181,7 +185,7 @@ export function CameraController() {
 
     // ─── Zoom in on landing: save follow position first ───
     useEffect(() => {
-        if (phase === 'landed' || phase === 'action') {
+        if ((phase === 'landed' || phase === 'action') && !isCPUTurn) {
             const tilePos = getPlayerTilePos();
             if (!tilePos) return;
 
@@ -213,7 +217,7 @@ export function CameraController() {
 
     // ─── On turn start: move camera to current player's token ───
     useEffect(() => {
-        if (phase === 'waiting') {
+        if (phase === 'waiting' && !isCPUTurn) {
             // If this player hasn't had a turn yet, go to overview position
             if (!playersWhoHavePlayed.current.has(currentPlayerIndex)) {
                 targetPosition.current.copy(OVERVIEW_POSITION);
