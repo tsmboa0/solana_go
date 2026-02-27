@@ -99,5 +99,44 @@ export function useTileActions() {
         setPhase('turnEnd');
     }, [closePopup, setPhase]);
 
-    return { getTileAction, executeBuy, executeRent, skipAction };
+
+    const executeAction = useCallback((actionId: string, tileId: number, input?: any) => {
+        const tile = TILES[tileId];
+        if (!tile) return;
+        const player = getCurrentPlayer();
+        const action = tile.available_actions?.find(a => a.id === actionId);
+
+        if (!action) {
+            console.warn(`Action ${actionId} not found on tile ${tileId}`);
+            return skipAction();
+        }
+
+        switch (action.action_type) {
+            case 'buy':
+                executeBuy(tileId);
+                break;
+            case 'continue':
+                skipAction();
+                break;
+            case 'swap':
+            case 'provide_liquidity':
+            case 'stake':
+            case 'borrow':
+            case 'vote':
+            case 'upgrade':
+                // For now just skip since core game logic isn't wired for these yet
+                // But in future we might dispatch to respective stores
+                console.log(`Executing ${action.action_type} on tile ${tileId}`);
+                skipAction();
+                break;
+            default:
+                console.warn(`Unknown action type: ${action.action_type}`);
+                skipAction();
+                break;
+        }
+
+    }, [getCurrentPlayer, executeBuy, skipAction]);
+
+    return { getTileAction, executeBuy, executeRent, skipAction, executeAction };
+
 }

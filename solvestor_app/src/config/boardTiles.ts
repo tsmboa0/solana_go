@@ -50,7 +50,17 @@ export const TILES: Tile[] = [
         tile_function: {
             action_type: "corner",
             corner_type: "go"
-        }
+        },
+        available_actions: [
+            {
+                id: "acknowledge",
+                label: "Continue",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 1,
@@ -70,7 +80,25 @@ export const TILES: Tile[] = [
             base_fee: 10,
             rent_formula: "flat",
             rent_value: 20
-        }
+        },
+        available_actions: [
+            {
+                id: "buy_wallet",
+                label: "Buy Wallet",
+                action_type: "buy",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "tile.owner == null"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 2,
@@ -88,7 +116,17 @@ export const TILES: Tile[] = [
             action_type: "event",
             reward_type: "random",
             reward_value: 0
-        }
+        },
+        available_actions: [
+            {
+                id: "acknowledge",
+                label: "Continue",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 3,
@@ -108,7 +146,25 @@ export const TILES: Tile[] = [
             base_fee: 10,
             rent_formula: "flat",
             rent_value: 20
-        }
+        },
+        available_actions: [
+            {
+                id: "buy_wallet",
+                label: "Buy Wallet",
+                action_type: "buy",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "tile.owner == null"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 4,
@@ -124,7 +180,17 @@ export const TILES: Tile[] = [
         image_url: usdcLogo,
         tile_function: {
             action_type: "neutral" // Representing tax
-        }
+        },
+        available_actions: [
+            {
+                id: "acknowledge",
+                label: "Continue",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 5,
@@ -144,7 +210,25 @@ export const TILES: Tile[] = [
             base_fee: 25,
             rent_formula: "owned_count_multiplier",
             rent_value: 25
-        }
+        },
+        available_actions: [
+            {
+                id: "buy_rpc",
+                label: "Buy RPC",
+                action_type: "buy",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "tile.owner == null"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 6,
@@ -166,7 +250,33 @@ export const TILES: Tile[] = [
             can_provide_liquidity: true,
             can_swap: true,
             epoch_yield_rate: 0.04
-        }
+        },
+        available_actions: [
+            {
+                id: "swap_assets",
+                label: "Swap",
+                action_type: "swap",
+                requires_input: true,
+                is_primary: true,
+                visibility_condition: "true"
+            },
+            {
+                id: "provide_liquidity",
+                label: "Provide Liquidity",
+                action_type: "provide_liquidity",
+                requires_input: true,
+                is_primary: false,
+                visibility_condition: "true"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 7,
@@ -184,7 +294,17 @@ export const TILES: Tile[] = [
             action_type: "event",
             reward_type: "random",
             reward_value: 0
-        }
+        },
+        available_actions: [
+            {
+                id: "acknowledge",
+                label: "Continue",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 8,
@@ -206,7 +326,33 @@ export const TILES: Tile[] = [
             can_provide_liquidity: true,
             can_swap: false,
             epoch_yield_rate: 0.05
-        }
+        },
+        available_actions: [
+            {
+                id: "stake_assets",
+                label: "Stake",
+                action_type: "stake",
+                requires_input: true,
+                is_primary: true,
+                visibility_condition: "player.balance > 0"
+            },
+            {
+                id: "borrow_assets",
+                label: "Borrow",
+                action_type: "borrow",
+                requires_input: true,
+                is_primary: false,
+                visibility_condition: "player.collateral_value > 0"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 9,
@@ -226,7 +372,25 @@ export const TILES: Tile[] = [
             base_fee: 10,
             rent_formula: "owned_count_multiplier",
             rent_value: 10
-        }
+        },
+        available_actions: [
+            {
+                id: "buy_utility",
+                label: "Buy Utility",
+                action_type: "buy",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "tile.owner == null"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
 
     // 🟠 Left Side (10–19) — Hot Post-Graveyard Zone
@@ -245,7 +409,17 @@ export const TILES: Tile[] = [
         tile_function: {
             action_type: "corner",
             corner_type: "graveyard"
-        }
+        },
+        available_actions: [
+            {
+                id: "acknowledge",
+                label: "Continue",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 11,
@@ -265,7 +439,25 @@ export const TILES: Tile[] = [
             base_fee: 50,
             rent_formula: "flat",
             rent_value: 75
-        }
+        },
+        available_actions: [
+            {
+                id: "buy_nft",
+                label: "Buy NFT",
+                action_type: "buy",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "tile.owner == null"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 12,
@@ -283,7 +475,25 @@ export const TILES: Tile[] = [
             action_type: "privacy",
             shield_cost: 200,
             shield_duration_epochs: 3
-        }
+        },
+        available_actions: [
+            {
+                id: "buy_shield",
+                label: "Buy Shield",
+                action_type: "buy",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "true"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 13,
@@ -303,7 +513,25 @@ export const TILES: Tile[] = [
             base_fee: 60,
             rent_formula: "flat",
             rent_value: 80
-        }
+        },
+        available_actions: [
+            {
+                id: "buy_nft",
+                label: "Buy NFT",
+                action_type: "buy",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "tile.owner == null"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 14,
@@ -325,7 +553,25 @@ export const TILES: Tile[] = [
             can_provide_liquidity: false,
             can_swap: false,
             epoch_yield_rate: 0.08
-        }
+        },
+        available_actions: [
+            {
+                id: "stake_assets",
+                label: "Stake",
+                action_type: "stake",
+                requires_input: true,
+                is_primary: true,
+                visibility_condition: "player.balance > 0"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 15,
@@ -345,7 +591,25 @@ export const TILES: Tile[] = [
             base_fee: 25,
             rent_formula: "owned_count_multiplier",
             rent_value: 25
-        }
+        },
+        available_actions: [
+            {
+                id: "buy_rpc",
+                label: "Buy RPC",
+                action_type: "buy",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "tile.owner == null"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 16,
@@ -365,7 +629,25 @@ export const TILES: Tile[] = [
             base_fee: 70,
             rent_formula: "flat",
             rent_value: 100
-        }
+        },
+        available_actions: [
+            {
+                id: "buy_nft",
+                label: "Buy NFT",
+                action_type: "buy",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "tile.owner == null"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 17,
@@ -383,7 +665,17 @@ export const TILES: Tile[] = [
             action_type: "event",
             reward_type: "random",
             reward_value: 0
-        }
+        },
+        available_actions: [
+            {
+                id: "acknowledge",
+                label: "Continue",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 18,
@@ -403,7 +695,25 @@ export const TILES: Tile[] = [
             base_fee: 80,
             rent_formula: "flat",
             rent_value: 110
-        }
+        },
+        available_actions: [
+            {
+                id: "buy_nft",
+                label: "Buy NFT",
+                action_type: "buy",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "tile.owner == null"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 19,
@@ -425,7 +735,25 @@ export const TILES: Tile[] = [
             can_provide_liquidity: false,
             can_swap: false,
             epoch_yield_rate: 0.05
-        }
+        },
+        available_actions: [
+            {
+                id: "stake_assets",
+                label: "Stake",
+                action_type: "stake",
+                requires_input: true,
+                is_primary: true,
+                visibility_condition: "player.balance > 0"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
 
     // 🔵 Top Row (20–29) — Strategic Control Zone
@@ -444,7 +772,17 @@ export const TILES: Tile[] = [
         tile_function: {
             action_type: "corner",
             corner_type: "grant"
-        }
+        },
+        available_actions: [
+            {
+                id: "acknowledge",
+                label: "Continue",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 21,
@@ -464,7 +802,25 @@ export const TILES: Tile[] = [
             base_fee: 30,
             rent_formula: "flat",
             rent_value: 50
-        }
+        },
+        available_actions: [
+            {
+                id: "buy_wallet",
+                label: "Buy Wallet",
+                action_type: "buy",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "tile.owner == null"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 22,
@@ -484,7 +840,17 @@ export const TILES: Tile[] = [
             penalty_value: 0.1,
             can_be_protected: true,
             protection_source: "Arcium Shield"
-        }
+        },
+        available_actions: [
+            {
+                id: "continue_after_penalty",
+                label: "Continue",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 23,
@@ -504,7 +870,25 @@ export const TILES: Tile[] = [
             base_fee: 35,
             rent_formula: "flat",
             rent_value: 55
-        }
+        },
+        available_actions: [
+            {
+                id: "buy_wallet",
+                label: "Buy Wallet",
+                action_type: "buy",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "tile.owner == null"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 24,
@@ -528,7 +912,33 @@ export const TILES: Tile[] = [
                 "Reduce RPC rent"
             ],
             effect_duration_epochs: 1
-        }
+        },
+        available_actions: [
+            {
+                id: "vote_yes",
+                label: "Vote Yes",
+                action_type: "vote",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "!player.has_voted_this_epoch"
+            },
+            {
+                id: "vote_no",
+                label: "Vote No",
+                action_type: "vote",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "!player.has_voted_this_epoch"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 25,
@@ -548,7 +958,25 @@ export const TILES: Tile[] = [
             base_fee: 25,
             rent_formula: "owned_count_multiplier",
             rent_value: 25
-        }
+        },
+        available_actions: [
+            {
+                id: "buy_rpc",
+                label: "Buy RPC",
+                action_type: "buy",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "tile.owner == null"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 26,
@@ -570,7 +998,25 @@ export const TILES: Tile[] = [
             can_provide_liquidity: true,
             can_swap: false,
             epoch_yield_rate: 0.06
-        }
+        },
+        available_actions: [
+            {
+                id: "provide_liquidity",
+                label: "Provide Liquidity",
+                action_type: "provide_liquidity",
+                requires_input: true,
+                is_primary: true,
+                visibility_condition: "true"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 27,
@@ -588,7 +1034,17 @@ export const TILES: Tile[] = [
             action_type: "event",
             reward_type: "random",
             reward_value: 0
-        }
+        },
+        available_actions: [
+            {
+                id: "acknowledge",
+                label: "Continue",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 28,
@@ -608,7 +1064,25 @@ export const TILES: Tile[] = [
             base_fee: 10,
             rent_formula: "owned_count_multiplier",
             rent_value: 10
-        }
+        },
+        available_actions: [
+            {
+                id: "buy_utility",
+                label: "Buy Utility",
+                action_type: "buy",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "tile.owner == null"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 29,
@@ -629,7 +1103,33 @@ export const TILES: Tile[] = [
             rent_formula: "flat",
             rent_value: 150,
             upgrade_cost: 500
-        }
+        },
+        available_actions: [
+            {
+                id: "buy_validator",
+                label: "Buy Validator",
+                action_type: "buy",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "tile.owner == null"
+            },
+            {
+                id: "upgrade_node",
+                label: "Upgrade Node",
+                action_type: "upgrade",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "tile.owner == player.id"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
 
     // 🔴 Right Side (30–39) — High Risk / Late Game
@@ -648,7 +1148,17 @@ export const TILES: Tile[] = [
         tile_function: {
             action_type: "corner",
             corner_type: "liquidation"
-        }
+        },
+        available_actions: [
+            {
+                id: "acknowledge",
+                label: "Continue",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 31,
@@ -669,7 +1179,33 @@ export const TILES: Tile[] = [
             rent_formula: "flat",
             rent_value: 160,
             upgrade_cost: 500
-        }
+        },
+        available_actions: [
+            {
+                id: "buy_validator",
+                label: "Buy Validator",
+                action_type: "buy",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "tile.owner == null"
+            },
+            {
+                id: "upgrade_node",
+                label: "Upgrade Node",
+                action_type: "upgrade",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "tile.owner == player.id"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 32,
@@ -687,7 +1223,17 @@ export const TILES: Tile[] = [
             action_type: "event",
             reward_type: "random",
             reward_value: 0
-        }
+        },
+        available_actions: [
+            {
+                id: "acknowledge",
+                label: "Continue",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 33,
@@ -705,7 +1251,17 @@ export const TILES: Tile[] = [
             action_type: "event",
             reward_type: "random",
             reward_value: 0
-        }
+        },
+        available_actions: [
+            {
+                id: "acknowledge",
+                label: "Continue",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 34,
@@ -723,7 +1279,17 @@ export const TILES: Tile[] = [
             action_type: "event",
             reward_type: "flat",
             reward_value: 500
-        }
+        },
+        available_actions: [
+            {
+                id: "acknowledge",
+                label: "Continue",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 35,
@@ -743,7 +1309,25 @@ export const TILES: Tile[] = [
             base_fee: 25,
             rent_formula: "owned_count_multiplier",
             rent_value: 25
-        }
+        },
+        available_actions: [
+            {
+                id: "buy_rpc",
+                label: "Buy RPC",
+                action_type: "buy",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "tile.owner == null"
+            },
+            {
+                id: "skip",
+                label: "Skip",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: false,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 36,
@@ -763,7 +1347,17 @@ export const TILES: Tile[] = [
             penalty_value: 1000,
             can_be_protected: true,
             protection_source: "Arcium Shield"
-        }
+        },
+        available_actions: [
+            {
+                id: "continue_after_penalty",
+                label: "Continue",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 37,
@@ -779,7 +1373,17 @@ export const TILES: Tile[] = [
         image_url: blueshiftLogo,
         tile_function: {
             action_type: "neutral"
-        }
+        },
+        available_actions: [
+            {
+                id: "acknowledge",
+                label: "Continue",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 38,
@@ -795,7 +1399,17 @@ export const TILES: Tile[] = [
         image_url: turbineLogo,
         tile_function: {
             action_type: "neutral"
-        }
+        },
+        available_actions: [
+            {
+                id: "acknowledge",
+                label: "Continue",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "true"
+            }
+        ]
     },
     {
         tile_index: 39,
@@ -815,6 +1429,16 @@ export const TILES: Tile[] = [
             base_fee: 150,
             rent_formula: "flat",
             rent_value: 200
-        }
+        },
+        available_actions: [
+            {
+                id: "acknowledge",
+                label: "Continue",
+                action_type: "continue",
+                requires_input: false,
+                is_primary: true,
+                visibility_condition: "true"
+            }
+        ]
     }
 ];

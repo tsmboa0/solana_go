@@ -136,6 +136,15 @@ export type TileFunction =
     | NeutralFunction
     | CornerFunction;
 
+export interface TileActionConfig {
+    id: string;
+    label: string;
+    action_type: string;
+    requires_input: boolean;
+    is_primary: boolean;
+    visibility_condition: string;
+}
+
 export interface Tile {
     tile_index: number;
     project_name: string;
@@ -149,6 +158,7 @@ export interface Tile {
     owner: string | "Not ownable";
     image_url: string;
     tile_function: TileFunction;
+    available_actions: TileActionConfig[];
 }
 
 
