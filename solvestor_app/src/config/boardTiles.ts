@@ -179,7 +179,10 @@ export const TILES: Tile[] = [
         owner: "Not ownable",
         image_url: usdcLogo,
         tile_function: {
-            action_type: "neutral" // Representing tax
+            action_type: "risk",
+            penalty_type: "flat",
+            penalty_value: 200,
+            can_be_protected: false
         },
         available_actions: [
             {

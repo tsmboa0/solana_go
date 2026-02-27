@@ -10,7 +10,7 @@ import { PLAYER_COLORS } from '@/config/theme';
 export const INITIAL_PLAYERS: Player[] = [
     {
         id: 'player-1',
-        name: 'Whale Alpha',
+        name: 'YOU',
         color: PLAYER_COLORS[0],
         position: 0,
         balance: STARTING_BALANCE,
@@ -19,7 +19,7 @@ export const INITIAL_PLAYERS: Player[] = [
     },
     {
         id: 'player-2',
-        name: 'Degen Beta',
+        name: 'CPU Bot',
         color: PLAYER_COLORS[1],
         position: 0,
         balance: STARTING_BALANCE,

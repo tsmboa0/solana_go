@@ -1,12 +1,9 @@
-// ============================================================
-// Tile Action Popup — Solvestor (SWS)
-// V4 - Data-Driven Action Modal
-// ============================================================
-
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '@/stores/useUIStore';
 import { useGameStore, selectCurrentPlayer } from '@/stores/useGameStore';
+import { useBlockchainStore } from '@/stores/useBlockchainStore';
 import { useTileActions } from '@/hooks/useTileActions';
+import { useCoinConfetti } from '@/hooks/useCoinConfetti';
 import { TILES } from '@/config/boardTiles';
 import { COLOR_GROUP_MAP } from '@/config/theme';
 import { formatCurrency } from '@/utils/formatters';
@@ -15,6 +12,7 @@ import {
     ShieldCheck, Building2, ArrowRight, X, Zap, Vote, Landmark
 } from 'lucide-react';
 import type { TileActionConfig } from '@/types/game';
+import { predictTileAction, type PlayerLocalState } from '@/engine/tileActionMirror';
 
 // Helper to evaluate string conditions securely using a limited scope context
 function evaluateCondition(condition: string, context: any): boolean {
@@ -45,7 +43,11 @@ export function TileActionPopup() {
     const currentPlayer = useGameStore(selectCurrentPlayer);
     const ownedTiles = useGameStore((s) => s.ownedTiles);
     const players = useGameStore((s) => s.players);
+    const isBeginnerMode = useGameStore((s) => s.isBeginnerMode);
+    const isExploreMode = useGameStore((s) => s.isExploreMode);
     const { skipAction, executeAction, executeRent } = useTileActions();
+    const showCoinEffect = useCoinConfetti((s) => s.showCoinEffect);
+    const isAsyncMode = isBeginnerMode || isExploreMode;
 
     const isDark = theme === 'dark';
     const tile = popupTileId !== null ? TILES[popupTileId] : null;
@@ -112,6 +114,10 @@ export function TileActionPopup() {
         glowColor = '#EAB308';
         statusLabel = 'EVENT';
         statusColor = isDark ? 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20' : 'text-yellow-700 bg-yellow-500/10 border-yellow-500/30';
+    } else if (tileType === 'privacy') {
+        glowColor = '#8B5CF6';
+        statusLabel = 'PRIVACY';
+        statusColor = isDark ? 'text-violet-400 bg-violet-500/10 border-violet-500/20' : 'text-violet-700 bg-violet-500/10 border-violet-500/30';
     }
 
     // --------------------------------------------------------
@@ -185,10 +191,78 @@ export function TileActionPopup() {
     // ACTIONS FILTERING & RENDERING
     // --------------------------------------------------------
 
-    // First figure out if rent needs to be forced.
     let actionsToRender: TileActionConfig[] = [];
 
-    if (activePopup === 'rent' && fn.action_type === 'ownable' && ownerPlayer) {
+    // ─── Choice popup (explore + beginner: DeFi/Privacy/Potion) ───
+    if (activePopup === 'choice' && isAsyncMode && popupTileId !== null) {
+        // Compute choice options from mirror prediction
+        const lastDice = useGameStore.getState().lastDiceResult;
+
+        let localPlayer: PlayerLocalState;
+        if (isBeginnerMode) {
+            const playerState = useBlockchainStore.getState().currentPlayerState;
+            localPlayer = {
+                id: currentPlayer?.id ?? '',
+                balance: currentPlayer?.balance ?? 0,
+                hasShield: playerState?.hasShield ?? false,
+                hasStakedDefi: playerState?.hasStakedDefi ?? false,
+                hasPotion: playerState?.hasPotion ?? false,
+                isInGraveyard: playerState?.isInGraveyard ?? false,
+            };
+        } else {
+            // Explore mode: use local player flags
+            localPlayer = {
+                id: currentPlayer?.id ?? '',
+                balance: currentPlayer?.balance ?? 0,
+                hasShield: currentPlayer?.hasShield ?? false,
+                hasStakedDefi: currentPlayer?.hasStakedDefi ?? false,
+                hasPotion: currentPlayer?.hasPotion ?? false,
+                isInGraveyard: currentPlayer?.isInGraveyard ?? false,
+            };
+        }
+
+        const diceResult: [number, number] = lastDice
+            ? [lastDice.die1, lastDice.die2]
+            : [1, 1];
+
+        const propertyOwners: Record<number, string> = {};
+        for (const [key, value] of Object.entries(ownedTiles)) {
+            if (value) propertyOwners[Number(key)] = value;
+        }
+
+        const prediction = predictTileAction(popupTileId, localPlayer, diceResult, propertyOwners, popupTileId);
+
+        if (prediction.choiceOptions && prediction.choiceOptions.length > 0) {
+            // Add choice option as primary action button
+            prediction.choiceOptions.forEach((opt) => {
+                const canAfford = currentPlayer.balance >= opt.cost;
+                actionsToRender.push({
+                    id: opt.id,
+                    label: `${opt.icon} ${opt.label}`,
+                    action_type: opt.id, // 'stake_defi', 'buy_shield', 'buy_potion'
+                    requires_input: false,
+                    is_primary: true,
+                    visibility_condition: 'true',
+                    _choiceMeta: { cost: opt.cost, canAfford, description: opt.description },
+                } as any);
+            });
+        }
+
+        // "Skip" button — fires performTileAction with chooseAction=false and auto-pays fee
+        const skipLabel = prediction.balanceChange < 0
+            ? `Skip (Pay ${formatCurrency(Math.abs(prediction.balanceChange))} fee)`
+            : 'Skip';
+
+        actionsToRender.push({
+            id: 'skip_choice',
+            label: skipLabel,
+            action_type: 'continue',
+            requires_input: false,
+            is_primary: false,
+            visibility_condition: 'true',
+            _skipFee: prediction.balanceChange < 0 ? Math.abs(prediction.balanceChange) : 0,
+        } as any);
+    } else if (activePopup === 'rent' && fn.action_type === 'ownable' && ownerPlayer) {
         actionsToRender = [{
             id: 'pay_rent',
             label: `Pay ${formatCurrency(fn.rent_value)} Rent`,
@@ -213,7 +287,7 @@ export function TileActionPopup() {
             return evaluateCondition(action.visibility_condition, evalContext);
         }) || [];
 
-        // Fallback if empty (e.g. for events which might not have available_actions defined yet)
+        // Fallback if empty
         if (actionsToRender.length === 0) {
             actionsToRender = [{
                 id: 'skip',
@@ -303,11 +377,15 @@ export function TileActionPopup() {
                             {actionsToRender.map((action, idx) => {
                                 const isPrimary = action.is_primary;
                                 const isPay = action.action_type === 'pay_rent' || action.action_type === 'pay_tax';
+                                const isChoice = ['stake_defi', 'buy_shield', 'buy_potion'].includes(action.action_type);
+                                const choiceMeta = (action as any)._choiceMeta;
 
                                 // Color logic based on primary state and type
                                 let btnClass = "border ";
                                 if (isPay) {
                                     btnClass += "bg-gradient-to-r from-rose-500 to-red-600 text-white shadow-rose-500/20 hover:shadow-rose-500/40 border-transparent";
+                                } else if (isChoice) {
+                                    btnClass += "bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-emerald-500/20 hover:shadow-emerald-500/40 border-transparent";
                                 } else if (isPrimary) {
                                     btnClass += "bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-indigo-500/20 hover:shadow-indigo-500/40 border-transparent";
                                 } else {
@@ -316,18 +394,82 @@ export function TileActionPopup() {
                                         : "bg-black/5 border-black/10 text-slate-700 hover:bg-black/10 hover:text-black";
                                 }
 
-                                // Disable logic if buy action but poor
+                                // Disable logic
                                 let disabled = false;
                                 if (action.action_type === 'buy' && (fn.buy_price && currentPlayer.balance < fn.buy_price)) {
+                                    disabled = true;
+                                    btnClass = "bg-slate-500/40 text-slate-400 cursor-not-allowed border border-white/10";
+                                }
+                                if (isChoice && choiceMeta && !choiceMeta.canAfford) {
                                     disabled = true;
                                     btnClass = "bg-slate-500/40 text-slate-400 cursor-not-allowed border border-white/10";
                                 }
 
                                 // Handle click
                                 const onClick = () => {
-                                    if (action.action_type === 'pay_rent') executeRent(popupTileId!);
-                                    else if (action.action_type === 'pay_tax') skipAction(); // Just skip for now to clear modal
-                                    else executeAction(action.id, popupTileId!);
+                                    if (isChoice && choiceMeta && popupTileId !== null) {
+                                        // Choice action — deduct cost + show confetti
+                                        showCoinEffect(choiceMeta.cost, 'debit', `${action.label}`);
+
+                                        // Deduct cost from balance
+                                        const players = useGameStore.getState().players;
+                                        const pIdx = players.findIndex((p: any) => p.id === currentPlayer.id);
+                                        if (pIdx !== -1) {
+                                            useGameStore.getState().updatePlayerFromChain(currentPlayer.id, {
+                                                balance: Math.max(0, players[pIdx].balance - choiceMeta.cost),
+                                            });
+                                        }
+
+                                        // Apply local state change based on choice
+                                        const stateUpdate: any = {};
+                                        if (action.action_type === 'stake_defi') stateUpdate.hasStakedDefi = true;
+                                        if (action.action_type === 'buy_shield') stateUpdate.hasShield = true;
+                                        if (action.action_type === 'buy_potion') stateUpdate.hasPotion = true;
+                                        if (Object.keys(stateUpdate).length > 0) {
+                                            useGameStore.getState().updatePlayerFromChain(currentPlayer.id, stateUpdate);
+                                        }
+
+                                        // Beginner mode: also fire on-chain
+                                        if (isBeginnerMode) {
+                                            setTimeout(() => {
+                                                window.dispatchEvent(new CustomEvent('solvestor:performTileAction', {
+                                                    detail: { tileIndex: popupTileId, chooseAction: true },
+                                                }));
+                                            }, 100);
+                                        }
+
+                                        skipAction();
+                                    } else if (action.id === 'skip_choice' && popupTileId !== null) {
+                                        // Skip choice — apply fee if applicable
+                                        const skipFee = (action as any)._skipFee || 0;
+                                        if (skipFee > 0) {
+                                            showCoinEffect(skipFee, 'debit', `Skipped — paid ${skipFee} fee`);
+
+                                            const players = useGameStore.getState().players;
+                                            const pIdx = players.findIndex((p: any) => p.id === currentPlayer.id);
+                                            if (pIdx !== -1) {
+                                                useGameStore.getState().updatePlayerFromChain(currentPlayer.id, {
+                                                    balance: Math.max(0, players[pIdx].balance - skipFee),
+                                                });
+                                            }
+                                        }
+
+                                        if (isBeginnerMode) {
+                                            setTimeout(() => {
+                                                window.dispatchEvent(new CustomEvent('solvestor:performTileAction', {
+                                                    detail: { tileIndex: popupTileId, chooseAction: false },
+                                                }));
+                                            }, 100);
+                                        }
+
+                                        skipAction();
+                                    } else if (action.action_type === 'pay_rent') {
+                                        executeRent(popupTileId!);
+                                    } else if (action.action_type === 'pay_tax') {
+                                        skipAction();
+                                    } else {
+                                        executeAction(action.id, popupTileId!);
+                                    }
                                 };
 
                                 // Make the last button span 2 columns if there's an odd number of items > 1
@@ -341,15 +483,19 @@ export function TileActionPopup() {
                                         className={`group relative w-full rounded-2xl font-bold text-[13px] tracking-wide transition-all duration-300 transform active:scale-[0.98] overflow-hidden shadow-sm flex items-center justify-center ${btnClass} ${makeSpan2 ? 'col-span-2' : ''}`}
                                         style={{ padding: '14px 16px', gap: '8px' }}
                                     >
-                                        {!disabled && (isPrimary || isPay) && (
+                                        {!disabled && (isPrimary || isPay || isChoice) && (
                                             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
                                         )}
                                         {isPay && <AlertTriangle size={16} />}
+                                        {isChoice && <ShieldCheck size={16} />}
                                         {action.action_type === 'buy' && <Building2 size={16} />}
                                         {action.action_type === 'continue' && !isPrimary && <X size={16} className="opacity-70" />}
                                         {action.action_type === 'continue' && isPrimary && <ArrowRight size={16} />}
 
                                         <span className="truncate">{action.label}</span>
+                                        {choiceMeta && (
+                                            <span className="opacity-60 text-[10px] ml-1">{choiceMeta.description}</span>
+                                        )}
                                         {action.requires_input && <span className="uppercase opacity-50 bg-black/20 rounded" style={{ fontSize: '10px', marginLeft: '4px', padding: '2px 6px' }}>Setup</span>}
                                     </button>
                                 );

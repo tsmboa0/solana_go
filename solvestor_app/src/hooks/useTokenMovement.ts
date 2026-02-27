@@ -10,6 +10,8 @@ import { TILE_LAYOUTS } from '@/utils/boardLayout';
 import { BOARD_SIZE, TOKEN_STEP_DURATION, TOKEN_Y_OFFSET } from '@/config/game';
 import { useGameStore } from '@/stores/useGameStore';
 import { soundManager } from '@/utils/SoundManager';
+import { useCoinConfetti } from '@/hooks/useCoinConfetti';
+import { GO_BONUS } from '@/config/onChainConstants';
 import type { Vector3Tuple } from 'three';
 
 interface TokenMovementState {
@@ -19,6 +21,8 @@ interface TokenMovementState {
     isMoving: boolean;
     /** Current tile being visited during animation */
     currentStepTile: number;
+    /** Whether the movement is a direct rush teleport */
+    isTeleporting: boolean;
 }
 
 /**
@@ -28,24 +32,64 @@ interface TokenMovementState {
  * the camera controller can follow along tile-by-tile.
  */
 export function useTokenMovement(
+    playerId: string,
     playerPosition: number,
     isActivePlayer: boolean,
     isCPU: boolean = false,
+    isRemote: boolean = false,
 ): TokenMovementState {
     const previousPosition = useRef(playerPosition);
     const [isMoving, setIsMoving] = useState(false);
+    const [isTeleporting, setIsTeleporting] = useState(false);
+    const isNextMoveTeleport = useRef(false);
     const [currentStepTile, setCurrentStepTile] = useState(playerPosition);
     const [currentPosition, setCurrentPosition] = useState<Vector3Tuple>(
         getWorldPosition(playerPosition)
     );
     const setMovingTileIndex = useGameStore((s) => s.setMovingTileIndex);
 
-    // When playerPosition changes, animate tile-by-tile
+    // Listen for incoming teleport requests specifically for this player
+    useEffect(() => {
+        const handler = (e: Event) => {
+            const { playerId: ePlayerId } = (e as CustomEvent).detail;
+            if (ePlayerId === playerId) {
+                isNextMoveTeleport.current = true;
+            }
+        };
+        window.addEventListener('solvestor:rushTeleport', handler);
+        return () => window.removeEventListener('solvestor:rushTeleport', handler);
+    }, [playerId]);
+
+    // When playerPosition changes, animate tile-by-tile or rush
     useEffect(() => {
         const from = previousPosition.current;
         const to = playerPosition;
 
         if (from === to) return;
+
+        // If it's a rush teleport, skip intermediate tiles and hop directly
+        if (isNextMoveTeleport.current) {
+            isNextMoveTeleport.current = false;
+            setIsMoving(true);
+            setIsTeleporting(true);
+
+            // Single step to destination
+            setTimeout(() => {
+                if (!isCPU && !isRemote) soundManager.play('teleport');
+
+                setCurrentStepTile(to);
+                setCurrentPosition(getWorldPosition(to));
+
+                // Allow some time for the visual glide
+                setTimeout(() => {
+                    setIsMoving(false);
+                    setIsTeleporting(false);
+                }, 500);
+            }, 0);
+
+            previousPosition.current = to;
+            return;
+        }
 
         // Calculate steps (handle wrapping)
         const steps: number[] = [];
@@ -62,13 +106,19 @@ export function useTokenMovement(
             setTimeout(() => {
                 const isFinalStep = i === steps.length - 1;
 
-                // Play audio synced with visual step landing (only for human players)
-                if (!isCPU) {
+                // Play audio synced with visual step landing (only for local human players)
+                if (!isCPU && !isRemote) {
                     setTimeout(() => {
                         if (isFinalStep) {
                             soundManager.play('pay-rent');
                         } else if (tileIndex === 0) {
                             soundManager.play('go-sound');
+                            // Show green confetti for passing GO
+                            useCoinConfetti.getState().showCoinEffect(
+                                GO_BONUS,
+                                'credit',
+                                'Passed GO! Collect bonus!'
+                            );
                         } else {
                             soundManager.play('token-step');
                         }
@@ -95,9 +145,9 @@ export function useTokenMovement(
         });
 
         previousPosition.current = to;
-    }, [playerPosition, isActivePlayer, setMovingTileIndex]);
+    }, [playerPosition, isActivePlayer, setMovingTileIndex, isCPU, isRemote]);
 
-    return { currentPosition, isMoving, currentStepTile };
+    return { currentPosition, isMoving, currentStepTile, isTeleporting };
 }
 
 /** Get the world position for a tile, offset for token height */

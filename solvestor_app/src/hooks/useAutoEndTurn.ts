@@ -16,12 +16,14 @@ export function useAutoEndTurn() {
     const phase = useGameStore((s) => s.phase);
     const endTurn = useGameStore((s) => s.endTurn);
     const isExploreMode = useGameStore((s) => s.isExploreMode);
+    const isBeginnerMode = useGameStore((s) => s.isBeginnerMode);
+    const isAsyncMode = isExploreMode || isBeginnerMode;
 
     const isProcessing = useRef(false);
 
     useEffect(() => {
-        // Only in explore mode, only when human's turn ends
-        if (!isExploreMode) return;
+        // Auto-end turn in async modes (explore & beginner)
+        if (!isAsyncMode) return;
         if (phase !== 'turnEnd') return;
         if (isProcessing.current) return;
 
@@ -37,5 +39,5 @@ export function useAutoEndTurn() {
             clearTimeout(timer);
             isProcessing.current = false;
         };
-    }, [phase, isExploreMode, endTurn]);
+    }, [phase, isAsyncMode, endTurn]);
 }

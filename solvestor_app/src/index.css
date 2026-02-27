@@ -26,9 +26,13 @@ body,
 #root {
   width: 100%;
   height: 100%;
-  overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Apply to pages that should NOT scroll (Landing, Game) */
+.overflow-hidden {
+  overflow: hidden;
 }
 
 body {
@@ -60,4 +64,19 @@ button {
   font-weight: 400 700;
   font-display: swap;
   src: url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+}
+
+/* Responsive Background for Pages */
+.page-bg {
+  background-image: url('./assets/mobile.webp');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+@media (min-width: 768px) {
+  .page-bg {
+    background-image: url('./assets/background-desktop1.webp');
+  }
 }

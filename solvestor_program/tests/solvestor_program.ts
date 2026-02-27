@@ -34,11 +34,11 @@ describe("solvestor_program", () => {
   const providerEphemeralRollup = new anchor.AnchorProvider(
     new anchor.web3.Connection(
       process.env.EPHEMERAL_PROVIDER_ENDPOINT ||
-      "https://devnet.magicblock.app/",
+      "https://devnet-eu.magicblock.app/",
       {
         wsEndpoint:
           process.env.EPHEMERAL_WS_ENDPOINT ||
-          "wss://devnet.magicblock.app/",
+          "wss://devnet-eu.magicblock.app/",
       }
     ),
     anchor.Wallet.local()
@@ -52,19 +52,6 @@ describe("solvestor_program", () => {
   );
   const player2Keypair = Keypair.fromSecretKey(
     Uint8Array.from(player2Secret)
-  );
-
-  const providerEphemeralRollup2 = new anchor.AnchorProvider(
-    new anchor.web3.Connection(
-      process.env.EPHEMERAL_PROVIDER_ENDPOINT ||
-      "https://devnet-eu.magicblock.app/",
-      {
-        wsEndpoint:
-          process.env.EPHEMERAL_WS_ENDPOINT ||
-          "wss://devnet-eu.magicblock.app/",
-      }
-    ),
-    new anchor.Wallet(player2Keypair)
   );
 
   console.log("L1 Connection:", provider.connection.rpcEndpoint);
@@ -111,7 +98,16 @@ describe("solvestor_program", () => {
         },
       ];
     }
-    return [];
+    // Deligate to EU Validator
+    return [
+      {
+        pubkey: new PublicKey(
+          "MEUGGrYPxKk17hCr7wpT6s8dtNokZj5U2L57vjYMS8e"
+        ),
+        isSigner: false,
+        isWritable: false,
+      },
+    ];
   }
 
   // ─── Helper: Send tx on ER ───────────────────────────────

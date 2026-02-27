@@ -10,6 +10,7 @@ import { motion } from 'framer-motion';
 import { useGameStore, selectCurrentPlayer } from '@/stores/useGameStore';
 import { useUIStore } from '@/stores/useUIStore';
 import { WealthCounter } from './WealthCounter';
+import { LeaveRoomButton } from './LeaveRoomButton';
 
 export function HUD() {
     const currentPlayer = useGameStore(selectCurrentPlayer);
@@ -28,45 +29,47 @@ export function HUD() {
         >
             <div className="flex items-start justify-between">
                 {/* Left: Player avatar + balance */}
-                <button
-                    className="flex items-center gap-2.5"
-                    onClick={() => openPortfolio(currentPlayer.id)}
-                >
-                    {/* Player avatar circle */}
-                    <div
-                        className={`
+                <div className="flex items-center gap-2">
+                    <LeaveRoomButton />
+
+                    <button
+                        className="flex items-center gap-2.5"
+                        onClick={() => openPortfolio(currentPlayer.id)}
+                    >
+                        {/* Player avatar circle */}
+                        <div
+                            className={`
               w-11 h-11 rounded-full flex items-center justify-center text-lg font-bold
               border-2
               ${isDark ? 'border-white/20' : 'border-white'}
               shadow-md
             `}
-                        style={{
-                            background: `linear-gradient(135deg, ${currentPlayer.color}, ${currentPlayer.color}88)`,
-                        }}
-                    >
-                        {currentPlayer.name.charAt(0)}
-                    </div>
+                            style={{
+                                background: `linear-gradient(135deg, ${currentPlayer.color}, ${currentPlayer.color}88)`,
+                            }}
+                        >
+                            {currentPlayer.name.charAt(0)}
+                        </div>
 
-                    {/* Balance pill */}
-                    <div
-                        className={`
+                        {/* Balance pill */}
+                        <div
+                            className={`
               flex items-center gap-1.5 px-3 py-1.5 rounded-full
               ${isDark
-                                ? 'bg-[rgba(16,16,32,0.8)] border border-white/10'
-                                : 'bg-white/90 border border-gray-200 shadow-sm'
-                            }
+                                    ? 'bg-[rgba(16,16,32,0.8)] border border-white/10'
+                                    : 'bg-white/90 border border-gray-200 shadow-sm'
+                                }
               backdrop-blur-md
             `}
-                    >
-                        <span className="text-xs">💰</span>
-                        <WealthCounter
-                            value={currentPlayer.balance}
-                            className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}
-                        />
-                    </div>
-                </button>
-
-                {/* Right: Player indicators + turn */}
+                        >
+                            <span className="text-xs">💰</span>
+                            <WealthCounter
+                                value={currentPlayer.balance}
+                                className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}
+                            />
+                        </div>
+                    </button>
+                </div>
                 <div className="flex items-center gap-2">
                     {/* Turn counter */}
                     <div

@@ -31,7 +31,10 @@ export function BottomSheet() {
                 <>
                     {/* Backdrop */}
                     <motion.div
-                        className="fixed inset-0 z-40 bg-black/30"
+                        style={{
+                            position: 'fixed', inset: 0, zIndex: 40,
+                            backgroundColor: 'rgba(0,0,0,0.3)',
+                        }}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
@@ -40,16 +43,15 @@ export function BottomSheet() {
 
                     {/* Sheet */}
                     <motion.div
-                        className={`
-              fixed bottom-0 left-0 right-0 z-50
-              rounded-t-3xl px-6 pt-4 pb-8
-              max-h-[60vh] overflow-y-auto
-              ${isDark
-                                ? 'bg-[rgba(16,16,32,0.85)] border-t border-white/[0.08]'
-                                : 'bg-[rgba(255,255,255,0.9)] border-t border-black/[0.08]'
-                            }
-              backdrop-blur-2xl
-            `}
+                        style={{
+                            position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
+                            borderTopLeftRadius: '24px', borderTopRightRadius: '24px',
+                            padding: '16px 24px 32px 24px',
+                            maxHeight: '60vh', overflowY: 'auto',
+                            backgroundColor: isDark ? 'rgba(16,16,32,0.85)' : 'rgba(255,255,255,0.9)',
+                            borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
+                            backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+                        }}
                         initial={{ y: '100%' }}
                         animate={{ y: 0 }}
                         exit={{ y: '100%' }}
@@ -62,92 +64,81 @@ export function BottomSheet() {
                         }}
                     >
                         {/* Drag handle */}
-                        <div className="flex justify-center mb-4">
-                            <div
-                                className={`w-10 h-1 rounded-full ${isDark ? 'bg-white/20' : 'bg-black/20'
-                                    }`}
-                            />
+                        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
+                            <div style={{
+                                width: '40px', height: '4px', borderRadius: '4px',
+                                backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'
+                            }} />
                         </div>
 
                         {/* Category badge + Icon */}
-                        <div className="flex items-center gap-3 mb-3">
-                            <div className="w-10 h-10 flex items-center justify-center">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                            <div style={{ width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 {tile.image_url ? (
-                                    <img src={tile.image_url} alt={tile.project_name} className="w-full h-full object-contain rounded" />
+                                    <img src={tile.image_url} alt={tile.project_name} style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '4px' }} />
                                 ) : (
-                                    <div className="w-full h-full bg-gray-500 rounded" />
+                                    <div style={{ width: '100%', height: '100%', backgroundColor: '#6b7280', borderRadius: '4px' }} />
                                 )}
                             </div>
                             <div>
-                                <h2
-                                    className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'
-                                        }`}
-                                >
+                                <h2 style={{
+                                    fontSize: '18px', fontWeight: 'bold', margin: 0,
+                                    color: isDark ? '#ffffff' : '#111827'
+                                }}>
                                     {tile.project_name}
                                 </h2>
-                                <span
-                                    className="text-xs font-medium px-2 py-0.5 rounded-full uppercase tracking-wider"
-                                    style={{
-                                        backgroundColor: (tile.color_group ? COLOR_GROUP_MAP[tile.color_group] : '#888') + '22',
-                                        color: tile.color_group ? COLOR_GROUP_MAP[tile.color_group] : '#888',
-                                    }}
-                                >
+                                <span style={{
+                                    fontSize: '12px', fontWeight: 500, padding: '2px 8px', borderRadius: '9999px',
+                                    textTransform: 'uppercase', letterSpacing: '0.05em', display: 'inline-block', marginTop: '4px',
+                                    backgroundColor: (tile.color_group ? COLOR_GROUP_MAP[tile.color_group] : '#888') + '22',
+                                    color: tile.color_group ? COLOR_GROUP_MAP[tile.color_group] : '#888',
+                                }}>
                                     {tile.type}
                                 </span>
                             </div>
                         </div>
 
                         {/* Description */}
-                        <p
-                            className={`text-sm mb-2 ${isDark ? 'text-white/60' : 'text-gray-600'
-                                }`}
-                        >
+                        <p style={{
+                            fontSize: '14px', marginBottom: '8px', marginTop: 0,
+                            color: isDark ? 'rgba(255,255,255,0.6)' : '#4b5563'
+                        }}>
                             {tile.description}
                         </p>
-                        <p
-                            className={`text-sm mb-4 font-semibold ${isDark ? 'text-white/80' : 'text-gray-800'
-                                }`}
-                        >
+                        <p style={{
+                            fontSize: '14px', marginBottom: '16px', marginTop: 0, fontWeight: 600,
+                            color: isDark ? 'rgba(255,255,255,0.8)' : '#1f2937'
+                        }}>
                             {tile.game_description}
                         </p>
 
                         {/* Stats grid */}
-                        <div className="grid grid-cols-2 gap-3 mb-4">
+                        <div style={{
+                            display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px', marginBottom: '16px'
+                        }}>
                             {tile.is_ownable && tile.tile_function.action_type === 'ownable' && (
-                                <div
-                                    className={`rounded-xl p-3 ${isDark ? 'bg-white/[0.05]' : 'bg-black/[0.03]'
-                                        }`}
-                                >
-                                    <div
-                                        className={`text-xs ${isDark ? 'text-white/40' : 'text-gray-500'
-                                            }`}
-                                    >
+                                <div style={{
+                                    borderRadius: '12px', padding: '12px',
+                                    backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)'
+                                }}>
+                                    <div style={{ fontSize: '12px', color: isDark ? 'rgba(255,255,255,0.4)' : '#6b7280' }}>
                                         Price
                                     </div>
-                                    <div
-                                        className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'
-                                            }`}
-                                    >
+                                    <div style={{ fontSize: '16px', fontWeight: 'bold', color: isDark ? '#ffffff' : '#111827' }}>
                                         {formatCurrency(tile.tile_function.buy_price)}
                                     </div>
                                 </div>
                             )}
 
                             {tile.is_ownable && tile.tile_function.action_type === 'ownable' && (
-                                <div
-                                    className={`rounded-xl p-3 ${isDark ? 'bg-white/[0.05]' : 'bg-black/[0.03]'
-                                        }`}
-                                >
-                                    <div
-                                        className={`text-xs ${isDark ? 'text-white/40' : 'text-gray-500'
-                                            }`}
-                                    >
+                                <div style={{
+                                    borderRadius: '12px', padding: '12px',
+                                    backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)'
+                                }}>
+                                    <div style={{ fontSize: '12px', color: isDark ? 'rgba(255,255,255,0.4)' : '#6b7280' }}>
                                         Rent
                                     </div>
-                                    <div
-                                        className={`text-base font-bold ${isDark ? 'text-emerald-400' : 'text-emerald-600'
-                                            }`}
-                                    >
+                                    <div style={{ fontSize: '16px', fontWeight: 'bold', color: isDark ? '#34d399' : '#059669' }}>
                                         {formatCurrency(tile.tile_function.rent_value)}
                                     </div>
                                 </div>
@@ -156,28 +147,22 @@ export function BottomSheet() {
 
                         {/* Owner info */}
                         {ownerPlayer && (
-                            <div
-                                className={`flex items-center gap-2 rounded-xl p-3 ${isDark ? 'bg-white/[0.05]' : 'bg-black/[0.03]'
-                                    }`}
-                            >
-                                <div
-                                    className="w-3 h-3 rounded-full"
-                                    style={{ backgroundColor: ownerPlayer.color }}
-                                />
-                                <span
-                                    className={`text-sm ${isDark ? 'text-white/70' : 'text-gray-700'
-                                        }`}
-                                >
-                                    Owned by <strong>{ownerPlayer.name}</strong>
+                            <div style={{
+                                display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '12px', padding: '12px',
+                                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)'
+                            }}>
+                                <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: ownerPlayer.color }} />
+                                <span style={{ fontSize: '14px', color: isDark ? 'rgba(255,255,255,0.7)' : '#374151' }}>
+                                    Owned by <strong style={{ fontWeight: 'bold' }}>{ownerPlayer.name}</strong>
                                 </span>
                             </div>
                         )}
 
                         {!owner && tile.is_ownable && tile.tile_function.action_type === 'ownable' && (
-                            <div
-                                className={`text-center text-sm py-2 ${isDark ? 'text-white/40' : 'text-gray-400'
-                                    }`}
-                            >
+                            <div style={{
+                                textAlign: 'center', fontSize: '14px', padding: '8px 0',
+                                color: isDark ? 'rgba(255,255,255,0.4)' : '#9ca3af'
+                            }}>
                                 Available for purchase
                             </div>
                         )}

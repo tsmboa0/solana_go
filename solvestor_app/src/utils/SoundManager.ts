@@ -14,6 +14,7 @@ import goSoundUrl from '@/assets/sounds/go-sound.mp3';
 import payRentUrl from '@/assets/sounds/pay-rent.mp3';
 import tokenStepUrl from '@/assets/sounds/token-step.wav';
 import rollingDiceUrl from '@/assets/sounds/rolling-dice.mp3';
+import teleportUrl from '@/assets/sounds/teleport.mp3';
 
 const SOUND_FILES = {
     'city-sound': citySoundUrl,
@@ -21,6 +22,7 @@ const SOUND_FILES = {
     'pay-rent': payRentUrl,
     'token-step': tokenStepUrl,
     'rolling-dice': rollingDiceUrl,
+    'teleport': teleportUrl,
 };
 
 export type SoundEffect = keyof typeof SOUND_FILES;

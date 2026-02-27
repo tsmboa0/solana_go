@@ -6,8 +6,9 @@
 // ============================================================
 
 import { create } from 'zustand';
+import type { TileActionResult } from '@/engine/tileActionMirror';
 
-export type ActivePopup = 'buy' | 'rent' | 'event' | 'tax' | 'corner' | null;
+export type ActivePopup = 'buy' | 'rent' | 'event' | 'tax' | 'corner' | 'choice' | 'event_card' | null;
 
 interface UIState {
     // --- Theme ---
@@ -31,6 +32,10 @@ interface UIState {
     popupTileId: number | null;
     showPopup: (type: ActivePopup, tileId: number) => void;
     closePopup: () => void;
+
+    // --- Event Card Popup (chance/chest/corner) ---
+    pendingEventResult: TileActionResult | null;
+    showEventCard: (tileId: number, result: TileActionResult) => void;
 
     // --- Turn Banner ---
     showTurnBanner: boolean;
@@ -72,7 +77,12 @@ export const useUIStore = create<UIState>()((set) => ({
     popupTileId: null,
     showPopup: (type: ActivePopup, tileId: number) =>
         set({ activePopup: type, popupTileId: tileId }),
-    closePopup: () => set({ activePopup: null, popupTileId: null }),
+    closePopup: () => set({ activePopup: null, popupTileId: null, pendingEventResult: null }),
+
+    // Event Card Popup
+    pendingEventResult: null,
+    showEventCard: (tileId: number, result: TileActionResult) =>
+        set({ activePopup: 'event_card', popupTileId: tileId, pendingEventResult: result }),
 
     // Turn Banner
     showTurnBanner: false,

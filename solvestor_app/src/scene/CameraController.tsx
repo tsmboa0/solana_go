@@ -99,11 +99,16 @@ export function CameraController() {
     const movingTileIndex = useGameStore((s) => s.movingTileIndex);
     const players = useGameStore((s) => s.players);
     const currentPlayerIndex = useGameStore((s) => s.currentPlayerIndex);
+    const isBeginnerMode = useGameStore((s) => s.isBeginnerMode);
+    const localPlayerIndex = useGameStore((s) => s.localPlayerIndex);
     const setCameraDetached = useCameraStore((s) => s.setCameraDetached);
     const isCameraDetached = useCameraStore((s) => s.isCameraDetached);
 
+    // In beginner mode, always follow local player; otherwise follow current player
+    const followIndex = isBeginnerMode ? localPlayerIndex : currentPlayerIndex;
+
     // CPU guard: don't auto-follow camera for CPU players
-    const currentPlayer = players[currentPlayerIndex];
+    const currentPlayer = players[followIndex];
     const isCPUTurn = currentPlayer?.isCPU === true;
 
     // --- Smooth interpolation targets (used in follow mode) ---
@@ -127,12 +132,12 @@ export function CameraController() {
 
     // Helper: get the active player's tile position
     const getPlayerTilePos = useCallback(() => {
-        const player = players[currentPlayerIndex];
+        const player = players[followIndex];
         if (!player) return null;
         const layout = TILE_LAYOUTS[player.position];
         if (!layout) return null;
         return new THREE.Vector3(layout.position[0], 0, layout.position[2]);
-    }, [players, currentPlayerIndex]);
+    }, [players, followIndex]);
 
     // ─── Determine if camera should be in follow or free mode ───
     const isFreeLookPhase = phase === 'waiting';
@@ -219,7 +224,7 @@ export function CameraController() {
     useEffect(() => {
         if (phase === 'waiting' && !isCPUTurn) {
             // If this player hasn't had a turn yet, go to overview position
-            if (!playersWhoHavePlayed.current.has(currentPlayerIndex)) {
+            if (!playersWhoHavePlayed.current.has(followIndex)) {
                 targetPosition.current.copy(OVERVIEW_POSITION);
                 targetLookAt.current.copy(BOARD_CENTER);
                 lerpSpeed.current = CAMERA_BASE_SPEED;
@@ -231,7 +236,7 @@ export function CameraController() {
                 return;
             }
 
-            const player = players[currentPlayerIndex];
+            const player = players[followIndex];
             if (!player) return;
             const layout = TILE_LAYOUTS[player.position];
             if (!layout) return;
@@ -266,9 +271,9 @@ export function CameraController() {
             }
         } else {
             // Mark current player as having played when they leave waiting
-            playersWhoHavePlayed.current.add(currentPlayerIndex);
+            playersWhoHavePlayed.current.add(followIndex);
         }
-    }, [phase, currentPlayerIndex, players]);
+    }, [phase, followIndex, players]);
 
     // ─── Recenter: snap back to board overview ───
     const recenter = useCallback(() => {

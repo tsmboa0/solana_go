@@ -41,7 +41,7 @@ const MODES: ModeCard[] = [
         title: 'Beginner',
         description: 'Real multiplayer on Solana. Compete with other players in a low-stakes environment.',
         icon: '🏆',
-        stake: '0.1 SOL',
+        stake: '0.2 SOL',
         enabled: true,
         mode: 'beginner',
         route: '/lobby',
@@ -99,6 +99,7 @@ export function ModeSelectPage() {
 
     return (
         <div
+            className="page-bg"
             style={{
                 width: '100%',
                 minHeight: '100vh',
@@ -106,7 +107,7 @@ export function ModeSelectPage() {
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background: 'linear-gradient(180deg, #f8f8fc 0%, #eeeef6 40%, #e8e4f0 100%)',
+                position: 'relative',
                 fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
                 padding: '40px 20px',
             }}
@@ -125,7 +126,7 @@ export function ModeSelectPage() {
                     style={{
                         fontSize: 'clamp(1.8rem, 5vw, 2.5rem)',
                         fontWeight: 900,
-                        background: 'linear-gradient(135deg, #9945FF 0%, #14F195 100%)',
+                        background: 'linear-gradient(135deg, #9945FF 0%, #7B3FE4 100%)',
                         WebkitBackgroundClip: 'text',
                         WebkitTextFillColor: 'transparent',
                         backgroundClip: 'text',

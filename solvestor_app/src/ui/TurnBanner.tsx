@@ -22,27 +22,29 @@ export function TurnBanner() {
 
     const isCPUTurn = currentPlayer?.isCPU === true;
     const isExploreMode = useGameStore((s) => s.isExploreMode);
+    const isBeginnerMode = useGameStore((s) => s.isBeginnerMode);
+    const isAsyncMode = isExploreMode || isBeginnerMode;
 
     // In explore mode: force-clear the banner if it was shown
     // during the race between first render and setupExploreMode
     useEffect(() => {
-        if (isExploreMode && showTurnBanner) {
+        if (isAsyncMode && showTurnBanner) {
             setShowTurnBanner(false);
         }
-    }, [isExploreMode, showTurnBanner, setShowTurnBanner]);
+    }, [isAsyncMode, showTurnBanner, setShowTurnBanner]);
 
     // Show banner on turn change (only for turn-based modes)
     useEffect(() => {
-        if (isCPUTurn || isExploreMode) return;
+        if (isCPUTurn || isAsyncMode) return;
         setShowTurnBanner(true);
         const timer = setTimeout(() => {
             setShowTurnBanner(false);
         }, TURN_BANNER_DURATION * 1000);
         return () => clearTimeout(timer);
-    }, [turnNumber, setShowTurnBanner, isCPUTurn, isExploreMode]);
+    }, [turnNumber, setShowTurnBanner, isCPUTurn, isAsyncMode]);
 
-    // Don't render anything in explore mode
-    if (isExploreMode) return null;
+    // Don't render anything in async modes (explore or beginner)
+    if (isAsyncMode) return null;
 
     return (
         <AnimatePresence>

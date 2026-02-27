@@ -178,6 +178,14 @@ export interface Player {
     isActive: boolean;
     /** Whether this player is controlled by CPU (Explore mode) */
     isCPU?: boolean;
+    /** Arcium privacy shield — protects against MEV risk tiles */
+    hasShield?: boolean;
+    /** DeFi staking position — earns yield on DeFi tile landing */
+    hasStakedDefi?: boolean;
+    /** BioDAO resurrection potion — survive being sent to graveyard */
+    hasPotion?: boolean;
+    /** Trapped in graveyard — can only escape by rolling doubles */
+    isInGraveyard?: boolean;
 }
 
 /** Phases of a single turn */

@@ -5,7 +5,7 @@
 // enter button. Light background, Solana branding.
 // ============================================================
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useWallet } from '@solana/wallet-adapter-react';
@@ -13,9 +13,22 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 
 export function LandingPage() {
     const navigate = useNavigate();
-    const { connected, publicKey } = useWallet();
+    const { connected, publicKey, disconnect } = useWallet();
     const { setVisible } = useWalletModal();
     const [isHoveringEnter, setIsHoveringEnter] = useState(false);
+    const [showWalletMenu, setShowWalletMenu] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    // Close wallet menu on outside click
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+                setShowWalletMenu(false);
+            }
+        };
+        if (showWalletMenu) document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showWalletMenu]);
 
     const handleConnectWallet = () => {
         setVisible(true);
@@ -32,6 +45,7 @@ export function LandingPage() {
 
     return (
         <div
+            className="page-bg overflow-hidden"
             style={{
                 width: '100%',
                 height: '100vh',
@@ -39,7 +53,6 @@ export function LandingPage() {
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background: 'linear-gradient(180deg, #f8f8fc 0%, #eeeef6 40%, #e8e4f0 100%)',
                 position: 'relative',
                 overflow: 'hidden',
                 fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
@@ -142,16 +155,17 @@ export function LandingPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.6, duration: 0.6 }}
                     style={{
-                        fontSize: 'clamp(0.9rem, 2.5vw, 1.15rem)',
-                        color: '#6b6b80',
-                        fontWeight: 500,
+                        fontSize: 'clamp(1rem, 3vw, 1.35rem)',
+                        color: '#4a4a5a',
+                        fontWeight: 600,
+                        letterSpacing: '-0.01em',
                         textAlign: 'center',
-                        maxWidth: '460px',
+                        maxWidth: '540px',
                         lineHeight: 1.5,
                         margin: 0,
                     }}
                 >
-                    A competitive capital allocation strategy game on Solana
+                    A competitive capital allocation strategy game on Solana, powered by MagicBlock.
                 </motion.p>
 
                 {/* Spacer */}
@@ -222,7 +236,7 @@ export function LandingPage() {
                                     display: 'flex',
                                     alignItems: 'center',
                                     gap: '10px',
-                                    padding: '10px 20px',
+                                    padding: '10px 12px 10px 20px',
                                     borderRadius: '16px',
                                     background: 'rgba(255,255,255,0.7)',
                                     backdropFilter: 'blur(12px)',
@@ -249,6 +263,115 @@ export function LandingPage() {
                                 >
                                     {shortAddress}
                                 </span>
+                                {/* Wallet menu trigger + dropdown */}
+                                <div ref={menuRef} style={{ position: 'relative' }}>
+                                    <button
+                                        onClick={() => setShowWalletMenu(!showWalletMenu)}
+                                        title="Wallet options"
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            width: '28px',
+                                            height: '28px',
+                                            borderRadius: '10px',
+                                            border: '1px solid rgba(0,0,0,0.08)',
+                                            background: showWalletMenu ? 'rgba(153,69,255,0.1)' : 'rgba(0,0,0,0.04)',
+                                            cursor: 'pointer',
+                                            fontSize: '0.75rem',
+                                            color: showWalletMenu ? '#9945FF' : '#8888a0',
+                                            transition: 'all 0.2s',
+                                            padding: 0,
+                                            marginLeft: '2px',
+                                        }}
+                                    >
+                                        ⏻
+                                    </button>
+
+                                    {/* Dropdown menu */}
+                                    {showWalletMenu && (
+                                        <div
+                                            style={{
+                                                position: 'absolute',
+                                                top: '50%',
+                                                left: 'calc(100% + 8px)',
+                                                transform: 'translateY(-50%)',
+                                                minWidth: '180px',
+                                                padding: '6px',
+                                                borderRadius: '14px',
+                                                background: 'rgba(255,255,255,0.9)',
+                                                backdropFilter: 'blur(20px)',
+                                                WebkitBackdropFilter: 'blur(20px)',
+                                                border: '1px solid rgba(255,255,255,0.6)',
+                                                boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+                                                zIndex: 100,
+                                            }}
+                                        >
+                                            <button
+                                                onClick={async () => {
+                                                    setShowWalletMenu(false);
+                                                    // Clear wallet adapter's localStorage so modal
+                                                    // shows fresh wallet selection (not auto-reconnect)
+                                                    localStorage.removeItem('walletName');
+                                                    await disconnect();
+                                                    // Small delay so adapter fully resets before modal opens
+                                                    setTimeout(() => setVisible(true), 100);
+                                                }}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '8px',
+                                                    width: '100%',
+                                                    padding: '10px 14px',
+                                                    borderRadius: '10px',
+                                                    border: 'none',
+                                                    background: 'transparent',
+                                                    cursor: 'pointer',
+                                                    fontSize: '0.82rem',
+                                                    fontWeight: 600,
+                                                    color: '#4a4a5a',
+                                                    fontFamily: 'inherit',
+                                                    transition: 'background 0.15s',
+                                                    textAlign: 'left',
+                                                }}
+                                                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(153,69,255,0.08)'; }}
+                                                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                                            >
+                                                <span style={{ fontSize: '1rem' }}>🔄</span>
+                                                Change Wallet
+                                            </button>
+                                            <div style={{ height: '1px', margin: '2px 10px', background: 'rgba(0,0,0,0.06)' }} />
+                                            <button
+                                                onClick={async () => {
+                                                    setShowWalletMenu(false);
+                                                    await disconnect();
+                                                }}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '8px',
+                                                    width: '100%',
+                                                    padding: '10px 14px',
+                                                    borderRadius: '10px',
+                                                    border: 'none',
+                                                    background: 'transparent',
+                                                    cursor: 'pointer',
+                                                    fontSize: '0.82rem',
+                                                    fontWeight: 600,
+                                                    color: '#e53e3e',
+                                                    fontFamily: 'inherit',
+                                                    transition: 'background 0.15s',
+                                                    textAlign: 'left',
+                                                }}
+                                                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.06)'; }}
+                                                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                                            >
+                                                <span style={{ fontSize: '1rem' }}>⏻</span>
+                                                Disconnect
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
                             </motion.div>
 
                             {/* Enter Button — game button feel */}

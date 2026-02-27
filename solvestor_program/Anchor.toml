@@ -15,7 +15,7 @@ solvestor_program = "HqicBmtY4WMbEVq2ZeLuWCUUr6VTTmfkJ6RGjFn3GLBo"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "devnet"
+cluster = "https://devnet.helius-rpc.com/?api-key=193b6782-795f-4f9f-a39c-838bfc136663"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

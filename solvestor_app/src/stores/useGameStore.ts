@@ -13,6 +13,7 @@ import type { Player, GamePhase, DiceResult } from '@/types/game';
 import { INITIAL_PLAYERS } from '@/config/players';
 import { TILES } from '@/config/boardTiles';
 import { BOARD_SIZE, GO_SALARY, TAX_AMOUNT } from '@/config/game';
+import { PLAYER_COLORS } from '@/config/theme';
 
 interface GameState {
     // --- State ---
@@ -28,6 +29,10 @@ interface GameState {
     turnNumber: number;
     /** Whether the game is in explore mode (solo vs CPU) */
     isExploreMode: boolean;
+    /** Whether the game is in beginner mode (async multiplayer) */
+    isBeginnerMode: boolean;
+    /** Index of the local (wallet-connected) player in the players array */
+    localPlayerIndex: number;
 
     // --- Actions ---
     rollDice: () => DiceResult;
@@ -37,10 +42,26 @@ interface GameState {
     payRent: (payerId: string, ownerId: string, amount: number) => void;
     endTurn: () => void;
     getCurrentPlayer: () => Player;
+    getLocalPlayer: () => Player;
+    /** Check if a player is remote (not the local player) */
+    isRemotePlayer: (playerId: string) => boolean;
     setMovingTileIndex: (tileIndex: number | null) => void;
     resetGame: () => void;
     /** Set up explore mode: mark player 2 as CPU */
     setupExploreMode: () => void;
+    /** Set up beginner mode: map on-chain players to local state */
+    setupBeginnerMode: (localIndex: number, onChainPlayers: { pubkey: string; balance: number; position: number }[]) => void;
+    /** Update a player's state from on-chain data or local logic */
+    updatePlayerFromChain: (playerId: string, data: {
+        balance?: number;
+        position?: number;
+        hasShield?: boolean;
+        hasStakedDefi?: boolean;
+        hasPotion?: boolean;
+        isInGraveyard?: boolean;
+    }) => void;
+    /** Update property ownership from on-chain data */
+    updateOwnershipFromChain: (propertyOwners: string[]) => void;
     /** Cooldown: timestamp of last roll for the human player */
     lastRollTime: number | null;
     /** Cooldown duration in ms */
@@ -49,6 +70,8 @@ interface GameState {
     startCooldown: () => void;
     /** Leave the current game: clears persisted state */
     leaveGame: () => void;
+    /** Direct position set for rush teleport (no step animation) */
+    setPlayerPosition: (playerId: string, position: number) => void;
 }
 
 const INITIAL_STATE = {
@@ -62,7 +85,12 @@ const INITIAL_STATE = {
     lastRollTime: null as number | null,
     cooldownDuration: 10000,
     isExploreMode: false,
+    isBeginnerMode: false,
+    localPlayerIndex: 0,
 };
+
+/** Player name pool for on-chain players */
+const PLAYER_NAMES = ['Whale Alpha', 'Degen Beta', 'Shark Gamma', 'Ape Delta'];
 
 export const useGameStore = create<GameState>()(
     persist(
@@ -99,17 +127,19 @@ export const useGameStore = create<GameState>()(
                     const oldPosition = player.position;
                     const newPosition = (oldPosition + steps) % BOARD_SIZE;
 
-                    // Check if player passed GO
-                    if (newPosition < oldPosition) {
+                    // Check if player passed GO (only add salary in explore mode —
+                    // in beginner mode, balance comes from on-chain)
+                    if (newPosition < oldPosition && !state.isBeginnerMode) {
                         player.balance += GO_SALARY;
                     }
 
                     player.position = newPosition;
 
-                    // Only set phase to 'moving' for the active (human) player's roll.
-                    // CPU calls movePlayer directly — don't change phase for CPU moves.
+                    // Only set phase to 'moving' for the LOCAL player's roll.
+                    // CPU players and remote players don't change phase.
                     const isCPUPlayer = player.isCPU === true;
-                    if (!isCPUPlayer) {
+                    const isRemote = state.isBeginnerMode && player.id !== state.players[state.localPlayerIndex]?.id;
+                    if (!isCPUPlayer && !isRemote) {
                         state.phase = 'moving';
                     }
                 });
@@ -146,10 +176,10 @@ export const useGameStore = create<GameState>()(
 
             endTurn: () => {
                 set((state) => {
-                    // In explore mode, DON'T switch players — human stays active,
-                    // CPU operates independently on its own timer.
-                    if (state.isExploreMode) {
-                        // Just reset phase for the human player
+                    // In explore/beginner mode, DON'T switch players — local player stays active.
+                    // Remote players move independently via on-chain state sync.
+                    if (state.isExploreMode || state.isBeginnerMode) {
+                        // Just reset phase for the local player
                         state.phase = 'waiting';
                         state.lastDiceResult = null;
                         state.turnNumber += 1;
@@ -171,6 +201,21 @@ export const useGameStore = create<GameState>()(
                 return state.players[state.currentPlayerIndex];
             },
 
+            getLocalPlayer: () => {
+                const state = get();
+                if (state.isBeginnerMode) {
+                    return state.players[state.localPlayerIndex];
+                }
+                return state.players[state.currentPlayerIndex];
+            },
+
+            isRemotePlayer: (playerId: string) => {
+                const state = get();
+                if (!state.isBeginnerMode) return false;
+                const localPlayer = state.players[state.localPlayerIndex];
+                return localPlayer ? localPlayer.id !== playerId : false;
+            },
+
             setMovingTileIndex: (tileIndex: number | null) => {
                 set((state) => {
                     state.movingTileIndex = tileIndex;
@@ -186,6 +231,8 @@ export const useGameStore = create<GameState>()(
                     state.ownedTiles = {};
                     state.turnNumber = 1;
                     state.isExploreMode = false;
+                    state.isBeginnerMode = false;
+                    state.localPlayerIndex = 0;
                 });
             },
 
@@ -201,7 +248,10 @@ export const useGameStore = create<GameState>()(
                     }
 
                     state.players = structuredClone(INITIAL_PLAYERS);
-                    // Mark player 2 as CPU
+                    // Mark player 1 as YOU and player 2 as CPU
+                    if (state.players.length >= 1) {
+                        state.players[0].name = 'YOU';
+                    }
                     if (state.players.length >= 2) {
                         state.players[1].isCPU = true;
                         state.players[1].name = 'CPU Bot';
@@ -220,6 +270,76 @@ export const useGameStore = create<GameState>()(
                 set({ lastRollTime: Date.now() });
             },
 
+            // ─── Beginner Mode Setup (Async Multiplayer) ────────
+
+            setupBeginnerMode: (localIndex, onChainPlayers) => {
+                set((state) => {
+                    // Already set up — just reset transient state
+                    if (state.isBeginnerMode && state.players.length === onChainPlayers.length) {
+                        state.phase = 'waiting';
+                        state.lastDiceResult = null;
+                        state.movingTileIndex = null;
+                        return;
+                    }
+
+                    // Map on-chain players to local Player objects
+                    const players: Player[] = onChainPlayers.map((p, i) => ({
+                        id: p.pubkey,
+                        name: i === localIndex ? 'You' : (PLAYER_NAMES[i] || `Player ${i + 1}`),
+                        color: PLAYER_COLORS[i] || '#888888',
+                        position: p.position,
+                        balance: p.balance,
+                        ownedTiles: [],
+                        isActive: i === localIndex, // Only local player is "active"
+                        isCPU: false,
+                    }));
+
+                    state.players = players;
+                    state.currentPlayerIndex = localIndex; // Camera follows local
+                    state.localPlayerIndex = localIndex;
+                    state.phase = 'waiting';
+                    state.lastDiceResult = null;
+                    state.ownedTiles = {};
+                    state.turnNumber = 1;
+                    state.lastRollTime = null;
+                    state.isExploreMode = false;
+                    state.isBeginnerMode = true;
+                });
+            },
+
+            updatePlayerFromChain: (playerId, data) => {
+                set((state) => {
+                    const player = state.players.find((p) => p.id === playerId);
+                    if (!player) return;
+                    if (data.balance !== undefined) player.balance = data.balance;
+                    if (data.position !== undefined) player.position = data.position;
+                    if (data.hasShield !== undefined) player.hasShield = data.hasShield;
+                    if (data.hasStakedDefi !== undefined) player.hasStakedDefi = data.hasStakedDefi;
+                    if (data.hasPotion !== undefined) player.hasPotion = data.hasPotion;
+                    if (data.isInGraveyard !== undefined) player.isInGraveyard = data.isInGraveyard;
+                });
+            },
+
+            updateOwnershipFromChain: (propertyOwners) => {
+                set((state) => {
+                    const newOwned: Record<number, string> = {};
+                    const defaultPubkey = '11111111111111111111111111111111';
+                    for (let i = 0; i < propertyOwners.length; i++) {
+                        if (propertyOwners[i] && propertyOwners[i] !== defaultPubkey) {
+                            newOwned[i] = propertyOwners[i];
+                        }
+                    }
+                    state.ownedTiles = newOwned;
+
+                    // Also update each player's ownedTiles array
+                    for (const player of state.players) {
+                        player.ownedTiles = Object.entries(newOwned)
+                            .filter(([, ownerId]) => ownerId === player.id)
+                            .map(([tileId]) => Number(tileId));
+                    }
+                });
+            },
+
             leaveGame: () => {
                 set((state) => {
                     // Reset everything to initial
@@ -227,6 +347,13 @@ export const useGameStore = create<GameState>()(
                 });
                 // Clear the persisted storage
                 useGameStore.persist.clearStorage();
+            },
+
+            setPlayerPosition: (playerId, position) => {
+                set((state) => {
+                    const player = state.players.find((p) => p.id === playerId);
+                    if (player) player.position = position;
+                });
             },
         })),
         {
@@ -238,6 +365,8 @@ export const useGameStore = create<GameState>()(
                 ownedTiles: state.ownedTiles,
                 turnNumber: state.turnNumber,
                 isExploreMode: state.isExploreMode,
+                isBeginnerMode: state.isBeginnerMode,
+                localPlayerIndex: state.localPlayerIndex,
                 cooldownDuration: state.cooldownDuration,
                 // Don't persist: phase, lastDiceResult, movingTileIndex, lastRollTime
                 // These are transient and should start fresh on reload

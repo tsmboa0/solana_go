@@ -29,10 +29,15 @@ interface PlayerTokenProps {
 
 export function PlayerToken({ player, index }: PlayerTokenProps) {
     const groupRef = useRef<THREE.Group>(null);
-    const { currentPosition, isMoving } = useTokenMovement(
+    const isBeginnerMode = useGameStore((s) => s.isBeginnerMode);
+    const localPlayerId = useGameStore((s) => s.players[s.localPlayerIndex]?.id);
+    const isRemote = isBeginnerMode && player.id !== localPlayerId;
+    const { currentPosition, isMoving, isTeleporting } = useTokenMovement(
+        player.id,
         player.position,
         player.isActive,
         player.isCPU ?? false,
+        isRemote,
     );
 
     // Track hop animation progress
@@ -73,11 +78,12 @@ export function PlayerToken({ player, index }: PlayerTokenProps) {
         }
 
         if (hopProgress.current < 1) {
-            // Advance hop progress
-            hopProgress.current = Math.min(hopProgress.current + delta * HOP_SPEED, 1);
+            // Advance hop progress (teleports are 2x faster, flat speed)
+            const speed = isTeleporting ? 15 : HOP_SPEED;
+            hopProgress.current = Math.min(hopProgress.current + delta * speed, 1);
             const t = hopProgress.current;
 
-            // Ease in-out for smooth hop feel
+            // Ease in-out for smooth feel
             const eased = t < 0.5
                 ? 2 * t * t
                 : 1 - Math.pow(-2 * t + 2, 2) / 2;
@@ -86,9 +92,14 @@ export function PlayerToken({ player, index }: PlayerTokenProps) {
             groupRef.current.position.x = hopStartX.current + (targetX - hopStartX.current) * eased;
             groupRef.current.position.z = hopStartZ.current + (targetZ - hopStartZ.current) * eased;
 
-            // Parabolic Y arc: peaks at t=0.5
-            const arc = 4 * t * (1 - t); // 0 → 1 → 0 parabola
-            groupRef.current.position.y = TOKEN_Y_OFFSET + arc * HOP_HEIGHT;
+            if (isTeleporting) {
+                // Flat glide for teleport
+                groupRef.current.position.y = TOKEN_Y_OFFSET;
+            } else {
+                // Parabolic Y arc: peaks at t=0.5
+                const arc = 4 * t * (1 - t); // 0 → 1 → 0 parabola
+                groupRef.current.position.y = TOKEN_Y_OFFSET + arc * HOP_HEIGHT;
+            }
         } else {
             // At rest on tile
             groupRef.current.position.x = targetX;

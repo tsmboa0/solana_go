@@ -6,11 +6,13 @@
 // and animated dice when rolling.
 // ============================================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useGameStore } from '@/stores/useGameStore';
 import { useUIStore } from '@/stores/useUIStore';
+import { useBlockchainStore } from '@/stores/useBlockchainStore';
 import { useDiceRoll } from '@/hooks/useDiceRoll';
+import { useGameActionsContext } from '@/pages/GamePage';
 import { soundManager } from '@/utils/SoundManager';
 
 export function DiceButton() {
@@ -21,10 +23,12 @@ export function DiceButton() {
 
     const currentPlayer = useGameStore((s) => s.players[s.currentPlayerIndex]);
     const isExploreMode = useGameStore((s) => s.isExploreMode);
+    const isBeginnerMode = useGameStore((s) => s.isBeginnerMode);
     const startCooldown = useGameStore((s) => s.startCooldown);
 
-    // In explore mode, the human is ALWAYS the active player
-    const isCPUTurn = !isExploreMode && currentPlayer?.isCPU === true;
+    // In explore/beginner mode, the local player is ALWAYS active
+    const isAsyncMode = isExploreMode || isBeginnerMode;
+    const isCPUTurn = !isAsyncMode && currentPlayer?.isCPU === true;
 
     // Cooldown state
     const lastRollTime = useGameStore((s) => s.lastRollTime);
@@ -32,7 +36,7 @@ export function DiceButton() {
     const [cooldownRemaining, setCooldownRemaining] = useState(0);
 
     useEffect(() => {
-        if (!isExploreMode || !lastRollTime) {
+        if (!isAsyncMode || !lastRollTime) {
             setCooldownRemaining(0);
             return;
         }
@@ -43,13 +47,20 @@ export function DiceButton() {
         tick();
         const interval = setInterval(tick, 100);
         return () => clearInterval(interval);
-    }, [lastRollTime, cooldownDuration, isExploreMode]);
+    }, [lastRollTime, cooldownDuration, isAsyncMode]);
 
-    const isOnCooldown = isExploreMode && cooldownRemaining > 0;
+    const isOnCooldown = isAsyncMode && cooldownRemaining > 0;
 
-    // In explore mode: ignore phase (CPU can change it), only care about isDiceAnimating
-    const isAnimating = isExploreMode ? isDiceAnimating : (phase === 'rolling' || phase === 'moving' || isDiceAnimating);
-    const canRoll = isExploreMode ? !isOnCooldown && !isDiceAnimating : (phase === 'waiting' && !isDiceAnimating && !isCPUTurn && !isOnCooldown);
+    const gameActionsCtx = useGameActionsContext();
+
+    // VRF pending state for beginner mode
+    const [isPendingVRF, setIsPendingVRF] = useState(false);
+    const currentPlayerState = useBlockchainStore((s) => s.currentPlayerState);
+    const prevDiceResultRef = useRef<string | null>(null);
+
+    // In async mode: ignore phase (others can change it), only care about isDiceAnimating
+    const isAnimating = isAsyncMode ? (isDiceAnimating || isPendingVRF) : (phase === 'rolling' || phase === 'moving' || isDiceAnimating);
+    const canRoll = isAsyncMode ? !isOnCooldown && !isDiceAnimating && !isPendingVRF : (phase === 'waiting' && !isDiceAnimating && !isCPUTurn && !isOnCooldown);
 
     // Cooldown ring
     const radius = 44;
@@ -58,12 +69,42 @@ export function DiceButton() {
     const strokeDashoffset = circumference * (1 - cooldownProgress);
     const cooldownSeconds = Math.ceil(cooldownRemaining / 1000);
 
+    // Detect VRF result arrival (clear pending state)
+    useEffect(() => {
+        if (!isBeginnerMode || !isPendingVRF || !currentPlayerState) return;
+
+        const currentResult = JSON.stringify(currentPlayerState.lastDiceResult);
+        if (prevDiceResultRef.current !== null && currentResult !== prevDiceResultRef.current) {
+            // VRF result arrived!
+            setIsPendingVRF(false);
+        }
+    }, [isBeginnerMode, isPendingVRF, currentPlayerState]);
+
     const handleRollClick = async () => {
-        if (!canRoll) return;
+        if (!canRoll || isPendingVRF) return;
         await soundManager.init();
         soundManager.playBGM();
-        if (isExploreMode) startCooldown();
-        performRoll();
+        if (isAsyncMode) startCooldown();
+
+        if (isBeginnerMode && gameActionsCtx?.actions) {
+            // Beginner mode: send on-chain roll_dice, then start pending animation
+            setIsPendingVRF(true);
+            prevDiceResultRef.current = currentPlayerState
+                ? JSON.stringify(currentPlayerState.lastDiceResult)
+                : null;
+
+            // Start the pending dice animation locally
+            performRoll();
+
+            // Send on-chain VRF request (fire-and-forget)
+            gameActionsCtx.actions.rollDice().catch((err) => {
+                console.error('[DiceButton] On-chain rollDice failed:', err);
+                setIsPendingVRF(false);
+            });
+        } else {
+            // Explore mode: local random dice
+            performRoll();
+        }
     };
 
     // In turn-based mode only: hide during CPU turn

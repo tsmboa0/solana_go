@@ -18,9 +18,10 @@ export function EndTurnButton() {
     const currentPlayer = players[currentPlayerIndex];
     const isCPUTurn = currentPlayer?.isCPU === true;
     const isExploreMode = useGameStore((s) => s.isExploreMode);
+    const isBeginnerMode = useGameStore((s) => s.isBeginnerMode);
 
-    // In explore mode, turns auto-end — no button needed
-    const show = phase === 'turnEnd' && !isCPUTurn && !isExploreMode;
+    // In async modes (explore/beginner), turns auto-end — no button needed
+    const show = phase === 'turnEnd' && !isCPUTurn && !isExploreMode && !isBeginnerMode;
 
     const handleEndTurn = () => {
         endTurn();
