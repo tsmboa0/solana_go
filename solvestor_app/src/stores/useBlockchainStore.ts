@@ -2,7 +2,7 @@
 // Blockchain Store — Solvestor (SWS)
 // ============================================================
 // Manages all on-chain state: room creation, joining, leaving,
-// active games list, and real-time account subscriptions.
+// subscriptions. Pure Zustand store — no React hooks.
 // ============================================================
 
 import { create } from 'zustand';
@@ -10,19 +10,24 @@ import { BN } from '@coral-xyz/anchor';
 import {
     PublicKey,
     Transaction,
+    Keypair,
 } from '@solana/web3.js';
+import type { TransactionInstruction } from '@solana/web3.js';
 import type { AnchorWallet } from '@solana/wallet-adapter-react';
 import {
-    getProgram,
-    getERProgram,
     getL1Connection,
     getERConnection,
+    getProgram,
+    getERProgram,
     deriveGamePDA,
     derivePlayerPDA,
     deriveEscrowPDA,
     getValidatorRemainingAccounts,
     shortenPubkey,
+    PROGRAM_ID,
 } from '@/anchor/setup';
+import { useGameStore } from '@/stores/useGameStore';
+import { deriveTempKeypair } from '@/hooks/useSessionKey';
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -102,6 +107,13 @@ export type TransactionStep = {
     status: 'pending' | 'signing' | 'confirming' | 'done' | 'error';
 };
 
+// ─── Session Params (for bundling session creation) ──────────
+
+export interface SessionParams {
+    instructions: TransactionInstruction[];
+    tempKeypair: Keypair;
+}
+
 // ─── Store Interface ─────────────────────────────────────────
 
 interface BlockchainState {
@@ -114,7 +126,12 @@ interface BlockchainState {
     currentGameId: BN | null;
     currentGameState: OnChainGameState | null;
     currentPlayerState: OnChainPlayerState | null;
+    /** Where the last playerState update came from */
+    playerStateSource: 'subscription' | 'initial_fetch' | 'manual_fetch' | null;
     currentPlayerPDA: PublicKey | null;
+
+    // --- Remote Players (multiplayer sync) ---
+    remotePlayerStates: Record<string, OnChainPlayerState>;
 
     // --- Transaction State ---
     isCreating: boolean;
@@ -126,6 +143,7 @@ interface BlockchainState {
     // --- Subscription IDs ---
     _gameSubId: number | null;
     _playerSubId: number | null;
+    _remotePlayerSubIds: number[];
 
     // --- Actions ---
     fetchActiveGames: (wallet: AnchorWallet) => Promise<void>;
@@ -136,16 +154,19 @@ interface BlockchainState {
             roundDuration: number;
             startCapital: number;
             stakeAmount: number;
-        }
+        },
+        sessionParams?: SessionParams
     ) => Promise<{ gamePDA: PublicKey; gameId: BN } | null>;
     joinRoom: (
         wallet: AnchorWallet,
         gamePDA: PublicKey,
-        gameState: OnChainGame
+        gameState: OnChainGame,
+        sessionParams?: SessionParams
     ) => Promise<boolean>;
     leaveRoom: (wallet: AnchorWallet) => Promise<boolean>;
     subscribeToGame: (wallet: AnchorWallet, gamePDA: PublicKey) => void;
     subscribeToPlayer: (wallet: AnchorWallet, gamePDA: PublicKey, userPubkey: PublicKey) => void;
+    subscribeToAllPlayers: (wallet: AnchorWallet, gamePDA: PublicKey, playerPubkeys: PublicKey[]) => void;
     unsubscribeAll: () => void;
     clearError: () => void;
     clearCurrentGame: () => void;
@@ -162,7 +183,9 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
     currentGameId: null,
     currentGameState: null,
     currentPlayerState: null,
+    playerStateSource: null,
     currentPlayerPDA: null,
+    remotePlayerStates: {},
     isCreating: false,
     isJoining: false,
     isLeaving: false,
@@ -170,6 +193,7 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
     error: null,
     _gameSubId: null,
     _playerSubId: null,
+    _remotePlayerSubIds: [],
 
     // ─── Fetch Active Games ─────────────────────────────────
 
@@ -241,13 +265,18 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
 
     // ─── Create Room ────────────────────────────────────────
 
-    createRoom: async (wallet, config) => {
+    createRoom: async (wallet, config, sessionParams) => {
+        const hasSession = !!sessionParams;
         set({
             isCreating: true,
             error: null,
             txSteps: [
                 { label: 'Creating room & joining as Player 1', status: 'pending' },
-                { label: 'Delegating game to Ephemeral Rollup', status: 'pending' },
+                {
+                    label: hasSession
+                        ? 'Delegating player & activating session'
+                        : 'Delegating game to Ephemeral Rollup', status: 'pending'
+                },
             ],
         });
 
@@ -287,7 +316,7 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
             console.log('create_room tx:', createTx);
             set({ txSteps: updateStep(get().txSteps, 0, 'done') });
 
-            // ── Step 2: delegate_game + delegate_player (bundled) ──
+            // ── Step 2: delegate_player + session (bundled) ──
             set({ txSteps: updateStep(get().txSteps, 1, 'signing') });
 
             const delegatePlayerIx = await program.methods
@@ -297,9 +326,68 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
                     player: playerPDA,
                 })
                 .remainingAccounts(getValidatorRemainingAccounts())
-                .rpc({ skipPreflight: true });
+                .instruction();
 
-            console.log('delegate_player tx:', delegatePlayerIx);
+            const delegateTx = new Transaction().add(delegatePlayerIx);
+
+            console.log('[CreateRoom Step2] delegate_player ix built ✓');
+            console.log('[CreateRoom Step2] delegate_player ix programId:', delegatePlayerIx.programId.toBase58());
+            console.log('[CreateRoom Step2] delegate_player ix keys:', delegatePlayerIx.keys.length);
+
+            // Append session creation instructions if provided
+            if (sessionParams) {
+                console.log('[CreateRoom Step2] Appending', sessionParams.instructions.length, 'session ixs');
+                for (let i = 0; i < sessionParams.instructions.length; i++) {
+                    const ix = sessionParams.instructions[i];
+                    console.log(`[CreateRoom Step2] session ix[${i}] programId:`, ix.programId.toBase58(), 'keys:', ix.keys.length);
+                    delegateTx.add(ix);
+                }
+                console.log('[CreateRoom Step2] tempKeypair pubkey:', sessionParams.tempKeypair.publicKey.toBase58());
+            }
+
+            console.log('[CreateRoom Step2] Total ix count:', delegateTx.instructions.length);
+
+            delegateTx.feePayer = wallet.publicKey;
+            delegateTx.recentBlockhash = (
+                await connection.getLatestBlockhash()
+            ).blockhash;
+
+            // Sign with tempKeypair first (required signer for session)
+            if (sessionParams) {
+                delegateTx.partialSign(sessionParams.tempKeypair);
+            }
+
+            console.log('[CreateRoom Step2] Partial sign done, requesting wallet signature...');
+
+            // Wallet signs
+            const signedDelegateTx = await wallet.signTransaction(delegateTx);
+
+            console.log('[CreateRoom Step2] Wallet signed ✓. Simulating before send...');
+
+            // Simulate first to get logs on failure
+            try {
+                const simResult = await connection.simulateTransaction(signedDelegateTx);
+                if (simResult.value.err) {
+                    console.error('[CreateRoom Step2] ❌ SIMULATION FAILED');
+                    console.error('[CreateRoom Step2] Error:', JSON.stringify(simResult.value.err));
+                    console.error('[CreateRoom Step2] Logs:', simResult.value.logs);
+                } else {
+                    console.log('[CreateRoom Step2] ✅ Simulation passed. Units consumed:', simResult.value.unitsConsumed);
+                }
+            } catch (simErr: any) {
+                console.error('[CreateRoom Step2] Simulation threw:', simErr.message);
+            }
+
+            const delegateTxHash = await connection.sendRawTransaction(
+                signedDelegateTx.serialize(),
+                { skipPreflight: true }
+            );
+
+            console.log('[CreateRoom Step2] Sent tx:', delegateTxHash, '— awaiting confirmation...');
+
+            await connection.confirmTransaction(delegateTxHash, 'confirmed');
+
+            console.log('[CreateRoom Step2] ✅ Confirmed:', delegateTxHash);
             set({ txSteps: updateStep(get().txSteps, 1, 'done') });
 
             // Set current game state
@@ -312,7 +400,15 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
 
             return { gamePDA, gameId };
         } catch (err: any) {
-            console.error('Create room failed:', err);
+            console.error('[CreateRoom] ❌ FAILED:', err);
+            console.error('[CreateRoom] Error name:', err.name);
+            console.error('[CreateRoom] Error message:', err.message);
+            if (err.logs) {
+                console.error('[CreateRoom] Transaction logs:', err.logs);
+            }
+            if (err.transactionMessage) {
+                console.error('[CreateRoom] Transaction message:', err.transactionMessage);
+            }
             const steps = get().txSteps;
             const failIdx = steps.findIndex(s => s.status === 'signing' || s.status === 'confirming');
             if (failIdx >= 0) {
@@ -325,13 +421,18 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
 
     // ─── Join Room ──────────────────────────────────────────
 
-    joinRoom: async (wallet, gamePDA, gameState) => {
+    joinRoom: async (wallet, gamePDA, gameState, sessionParams) => {
+        const hasSession = !!sessionParams;
         set({
             isJoining: true,
             error: null,
             txSteps: [
                 { label: 'Joining room & staking SOL', status: 'pending' },
-                { label: 'Delegating player to Ephemeral Rollup', status: 'pending' },
+                {
+                    label: hasSession
+                        ? 'Delegating player & activating session'
+                        : 'Delegating player to Ephemeral Rollup', status: 'pending'
+                },
             ],
         });
 
@@ -367,11 +468,14 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
             console.log('join_room tx:', joinTx);
             set({ txSteps: updateStep(get().txSteps, 0, 'done') });
 
-            // ── Step 2: delegate_player ──
+            // ── Step 2: delegate_player (+ delegate_game if last player) + session ──
             set({ txSteps: updateStep(get().txSteps, 1, 'signing') });
 
+            const delegateTx = new Transaction();
+
             if (isLastPlayer) {
-                // Delegate player and game
+                // Last player also delegates the game state
+                console.log('[JoinRoom Step2] 🎯 Last player joining — delegating GAME state to ER');
                 const delegateGameIx = await program.methods
                     .delegateGame(gameData.gameId)
                     .accountsPartial({
@@ -380,41 +484,9 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
                     })
                     .remainingAccounts(getValidatorRemainingAccounts())
                     .instruction();
-
-                const delegatePlayerIx = await program.methods
-                    .delegatePlayer()
-                    .accountsPartial({
-                        payer: wallet.publicKey,
-                        player: playerPDA,
-                    })
-                    .remainingAccounts(getValidatorRemainingAccounts())
-                    .instruction();
-
-                // Bundle both delegation instructions into one transaction
-                const delegateTx = new Transaction().add(delegateGameIx, delegatePlayerIx);
-                delegateTx.feePayer = wallet.publicKey;
-                delegateTx.recentBlockhash = (
-                    await connection.getLatestBlockhash()
-                ).blockhash;
-
-                const signedDelegateTx = await wallet.signTransaction(delegateTx);
-                const delegateTxHash = await connection.sendRawTransaction(
-                    signedDelegateTx.serialize(),
-                    { skipPreflight: true }
-                );
-                await connection.confirmTransaction(delegateTxHash, 'confirmed');
-
-                set({ txSteps: updateStep(get().txSteps, 1, 'done') });
-
-                // Set current game state
-                set({
-                    isJoining: false,
-                    currentGamePDA: gamePDA,
-                    currentGameId: gameState.gameId,
-                    currentPlayerPDA: playerPDA,
-                });
-
-                return true
+                delegateTx.add(delegateGameIx);
+            } else {
+                console.log('[JoinRoom Step2] Not last player — only delegating PLAYER state');
             }
 
             const delegatePlayerIx = await program.methods
@@ -424,9 +496,56 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
                     player: playerPDA,
                 })
                 .remainingAccounts(getValidatorRemainingAccounts())
-                .rpc({ skipPreflight: true });
+                .instruction();
+            delegateTx.add(delegatePlayerIx);
 
-            console.log('delegate_player tx:', delegatePlayerIx);
+            // Append session creation instructions if provided
+            if (sessionParams) {
+                console.log('[JoinRoom Step2] Appending', sessionParams.instructions.length, 'session ixs');
+                for (const ix of sessionParams.instructions) {
+                    delegateTx.add(ix);
+                }
+            }
+
+            console.log('[JoinRoom Step2] Total ix count:', delegateTx.instructions.length);
+
+            delegateTx.feePayer = wallet.publicKey;
+            delegateTx.recentBlockhash = (
+                await connection.getLatestBlockhash()
+            ).blockhash;
+
+            // Sign with tempKeypair first (required signer for session)
+            if (sessionParams) {
+                delegateTx.partialSign(sessionParams.tempKeypair);
+            }
+
+            // Wallet signs
+            const signedDelegateTx = await wallet.signTransaction(delegateTx);
+
+            // Simulate before sending to capture any errors
+            try {
+                const simResult = await connection.simulateTransaction(signedDelegateTx);
+                if (simResult.value.err) {
+                    console.error('[JoinRoom Step2] ❌ SIMULATION FAILED');
+                    console.error('[JoinRoom Step2] Error:', JSON.stringify(simResult.value.err));
+                    if (simResult.value.logs) {
+                        console.error('[JoinRoom Step2] Logs:');
+                        simResult.value.logs.forEach((log, i) => console.error(`  [${i}] ${log}`));
+                    }
+                } else {
+                    console.log('[JoinRoom Step2] ✅ Simulation passed. Units consumed:', simResult.value.unitsConsumed);
+                }
+            } catch (simErr: any) {
+                console.warn('[JoinRoom Step2] Simulation threw:', simErr.message);
+            }
+
+            const delegateTxHash = await connection.sendRawTransaction(
+                signedDelegateTx.serialize(),
+                { skipPreflight: true }
+            );
+            await connection.confirmTransaction(delegateTxHash, 'confirmed');
+
+            console.log('[JoinRoom Step2] ✅ delegate + session tx confirmed:', delegateTxHash);
             set({ txSteps: updateStep(get().txSteps, 1, 'done') });
 
             // Set current game state
@@ -459,29 +578,52 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
         set({ isLeaving: true, error: null });
 
         try {
-            const program = getProgram(getL1Connection(), wallet);
             const [playerPDA] = derivePlayerPDA(currentGamePDA, wallet.publicKey);
 
-            // leave_room runs on ER (commit + undelegate)
-            // Build tx with L1 program, send via ER connection
-            const tx = await program.methods
+            // Use session key to sign leave_room (avoids wallet genesis hash check)
+            const tempKeypair = deriveTempKeypair(wallet.publicKey);
+
+            // Derive session token PDA
+            const SESSION_TOKEN_SEED = 'session_token';
+            const GUM_SESSION_PROGRAM_ID = new PublicKey('KeyspM2ssCJbqUhQ4k7sveSiY4WjnYsrXkC8oDbwde5');
+            const [sessionTokenPDA] = PublicKey.findProgramAddressSync(
+                [
+                    Buffer.from(SESSION_TOKEN_SEED),
+                    PROGRAM_ID.toBytes(),
+                    tempKeypair.publicKey.toBytes(),
+                    wallet.publicKey.toBuffer(),
+                ],
+                GUM_SESSION_PROGRAM_ID
+            );
+
+            // Build tx with ER program (accounts are on ER)
+            const erProgram = getERProgram(wallet);
+            const tx = await erProgram.methods
                 .leaveRoom()
                 .accountsPartial({
-                    user: wallet.publicKey,
+                    payer: tempKeypair.publicKey,
                     game: currentGamePDA,
                     player: playerPDA,
+                    sessionToken: sessionTokenPDA,
                 })
                 .transaction();
 
+            // Sign with tempKeypair (session key) and send to ER — NO wallet popup!
             const erConnection = getERConnection();
-            tx.feePayer = wallet.publicKey;
-            tx.recentBlockhash = (await erConnection.getLatestBlockhash()).blockhash;
+            const { value: { blockhash, lastValidBlockHeight } } =
+                await erConnection.getLatestBlockhashAndContext();
+            tx.recentBlockhash = blockhash;
+            tx.feePayer = tempKeypair.publicKey;
+            tx.sign(tempKeypair);
 
-            const signedTx = await wallet.signTransaction(tx);
-            const txHash = await erConnection.sendRawTransaction(signedTx.serialize(), {
-                skipPreflight: true,
-            });
-            await erConnection.confirmTransaction(txHash, 'confirmed');
+            const txHash = await erConnection.sendRawTransaction(
+                tx.serialize(),
+                { skipPreflight: true }
+            );
+            await erConnection.confirmTransaction(
+                { blockhash, lastValidBlockHeight, signature: txHash },
+                'confirmed'
+            );
 
             console.log('leave_room tx:', txHash);
 
@@ -493,6 +635,7 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
                 currentGameId: null,
                 currentGameState: null,
                 currentPlayerState: null,
+                playerStateSource: null,
                 currentPlayerPDA: null,
             });
 
@@ -525,6 +668,13 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
                         accountInfo.data
                     );
                     set({ currentGameState: decoded as OnChainGameState });
+
+                    // Sync property ownership from on-chain → game store
+                    const ownerStrings = (decoded as OnChainGameState).propertyOwners.map(
+                        (pk: PublicKey) => pk.toBase58()
+                    );
+                    useGameStore.getState().updateOwnershipFromChain(ownerStrings);
+                    console.log('[Blockchain] 📡 Game subscription: synced property_owners →', ownerStrings.filter((s: string) => s !== '11111111111111111111111111111111').length, 'owned');
                 } catch (err) {
                     console.error('Failed to decode GameState:', err);
                 }
@@ -540,11 +690,22 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
                 const erProgram = getERProgram(wallet);
                 const gameState = await (erProgram.account as any).gameState.fetch(gamePDA);
                 set({ currentGameState: gameState as OnChainGameState });
+
+                // Sync ownership on initial fetch too
+                const ownerStrings = (gameState as OnChainGameState).propertyOwners.map(
+                    (pk: PublicKey) => pk.toBase58()
+                );
+                useGameStore.getState().updateOwnershipFromChain(ownerStrings);
             } catch (err) {
                 // Try L1 if not yet on ER
                 try {
                     const gameState = await (program.account as any).gameState.fetch(gamePDA);
                     set({ currentGameState: gameState as OnChainGameState });
+
+                    const ownerStrings = (gameState as OnChainGameState).propertyOwners.map(
+                        (pk: PublicKey) => pk.toBase58()
+                    );
+                    useGameStore.getState().updateOwnershipFromChain(ownerStrings);
                 } catch {
                     console.error('Failed to fetch initial game state:', err);
                 }
@@ -571,7 +732,29 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
                         'playerState',
                         accountInfo.data
                     );
-                    set({ currentPlayerState: decoded as OnChainPlayerState });
+                    const balance = typeof decoded.balance === 'object' && 'toNumber' in decoded.balance
+                        ? (decoded.balance as any).toNumber()
+                        : Number(decoded.balance);
+
+                    console.log('[Blockchain] 📡 onAccountChange fired (subscription)', {
+                        dice: decoded.lastDiceResult,
+                        position: decoded.currentPosition,
+                        balance,
+                        hasShield: decoded.hasShield,
+                        hasStakedDefi: decoded.hasStakedDefi,
+                    });
+                    set({ currentPlayerState: decoded as OnChainPlayerState, playerStateSource: 'subscription' });
+
+                    // Sync local player state to game store (same pattern as subscribeToAllPlayers)
+                    const walletKey = wallet.publicKey.toBase58();
+                    useGameStore.getState().updatePlayerFromChain(walletKey, {
+                        position: decoded.currentPosition,
+                        balance,
+                        hasShield: decoded.hasShield,
+                        hasStakedDefi: decoded.hasStakedDefi,
+                        hasPotion: decoded.hasPotion,
+                        isInGraveyard: decoded.isInGraveyard,
+                    });
                 } catch (err) {
                     console.error('Failed to decode PlayerState:', err);
                 }
@@ -586,11 +769,19 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
             try {
                 const erProgram = getERProgram(wallet);
                 const playerState = await (erProgram.account as any).playerState.fetch(playerPDA);
-                set({ currentPlayerState: playerState as OnChainPlayerState });
+                console.log('[Blockchain] 📋 Initial fetch (ER)', {
+                    dice: playerState.lastDiceResult,
+                    position: playerState.currentPosition,
+                });
+                set({ currentPlayerState: playerState as OnChainPlayerState, playerStateSource: 'initial_fetch' });
             } catch (err) {
                 try {
                     const playerState = await (program.account as any).playerState.fetch(playerPDA);
-                    set({ currentPlayerState: playerState as OnChainPlayerState });
+                    console.log('[Blockchain] 📋 Initial fetch (L1)', {
+                        dice: playerState.lastDiceResult,
+                        position: playerState.currentPosition,
+                    });
+                    set({ currentPlayerState: playerState as OnChainPlayerState, playerStateSource: 'initial_fetch' });
                 } catch {
                     console.error('Failed to fetch initial player state:', err);
                 }
@@ -598,8 +789,106 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
         })();
     },
 
+    // ─── Subscribe to All Players (Multiplayer Sync) ────────
+    subscribeToAllPlayers: (wallet, gamePDA, playerPubkeys) => {
+        const erConnection = getERConnection();
+        const l1Connection = getL1Connection();
+        const program = getProgram(l1Connection, wallet);
+        const localPubkey = wallet.publicKey.toBase58();
+
+        // Clean up previous remote subs
+        const prevIds = get()._remotePlayerSubIds;
+        for (const id of prevIds) {
+            erConnection.removeAccountChangeListener(id);
+        }
+
+        const newSubIds: number[] = [];
+        const newStates: Record<string, OnChainPlayerState> = {};
+
+        for (const playerPubkey of playerPubkeys) {
+            const playerPubkeyStr = playerPubkey.toBase58();
+            // Skip local player (already subscribed via subscribeToPlayer)
+            if (playerPubkeyStr === localPubkey) continue;
+
+            const [playerPDA] = derivePlayerPDA(gamePDA, playerPubkey);
+
+            // Subscribe to changes on ER
+            const subId = erConnection.onAccountChange(
+                playerPDA,
+                (accountInfo) => {
+                    try {
+                        const decoded = (program.coder.accounts as any).decode(
+                            'playerState',
+                            accountInfo.data
+                        ) as OnChainPlayerState;
+
+                        // Update remote player states in blockchain store
+                        const current = get().remotePlayerStates;
+                        set({
+                            remotePlayerStates: {
+                                ...current,
+                                [playerPubkeyStr]: decoded,
+                            },
+                        });
+
+                        // Sync position + balance to game store for token movement
+                        const balance = typeof decoded.balance === 'object' && 'toNumber' in decoded.balance
+                            ? (decoded.balance as any).toNumber()
+                            : Number(decoded.balance);
+
+                        useGameStore.getState().updatePlayerFromChain(playerPubkeyStr, {
+                            position: decoded.currentPosition,
+                            balance,
+                            hasShield: decoded.hasShield,
+                            hasStakedDefi: decoded.hasStakedDefi,
+                            hasPotion: decoded.hasPotion,
+                            isInGraveyard: decoded.isInGraveyard,
+                        });
+
+                        console.log(`[RemoteSync] Player ${playerPubkeyStr.slice(0, 8)} → pos: ${decoded.currentPosition}, bal: ${balance}`);
+                    } catch (err) {
+                        console.error(`[RemoteSync] Failed to decode remote PlayerState for ${playerPubkeyStr.slice(0, 8)}:`, err);
+                    }
+                },
+                'confirmed'
+            );
+
+            newSubIds.push(subId);
+
+            // Initial fetch
+            (async () => {
+                try {
+                    const erProgram = getERProgram(wallet);
+                    const playerState = await (erProgram.account as any).playerState.fetch(playerPDA);
+                    const decoded = playerState as OnChainPlayerState;
+                    const current = get().remotePlayerStates;
+                    set({
+                        remotePlayerStates: { ...current, [playerPubkeyStr]: decoded },
+                    });
+                    newStates[playerPubkeyStr] = decoded;
+                    console.log(`[RemoteSync] Initial fetch for ${playerPubkeyStr.slice(0, 8)} ✓`);
+                } catch {
+                    try {
+                        const playerState = await (program.account as any).playerState.fetch(playerPDA);
+                        const decoded = playerState as OnChainPlayerState;
+                        const current = get().remotePlayerStates;
+                        set({
+                            remotePlayerStates: { ...current, [playerPubkeyStr]: decoded },
+                        });
+                        console.log(`[RemoteSync] Initial fetch (L1 fallback) for ${playerPubkeyStr.slice(0, 8)} ✓`);
+                    } catch (err2) {
+                        console.warn(`[RemoteSync] Initial fetch failed for ${playerPubkeyStr.slice(0, 8)}:`, err2);
+                    }
+                }
+            })();
+        }
+
+        set({ _remotePlayerSubIds: newSubIds });
+        console.log(`[RemoteSync] Subscribed to ${newSubIds.length} remote player(s)`);
+    },
+
     unsubscribeAll: () => {
-        const { _gameSubId, _playerSubId } = get();
+        const { _gameSubId, _playerSubId, _remotePlayerSubIds } = get();
         const erConnection = getERConnection();
 
         if (_gameSubId !== null) {
@@ -608,8 +897,16 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
         if (_playerSubId !== null) {
             erConnection.removeAccountChangeListener(_playerSubId);
         }
+        for (const id of _remotePlayerSubIds) {
+            erConnection.removeAccountChangeListener(id);
+        }
 
-        set({ _gameSubId: null, _playerSubId: null });
+        set({
+            _gameSubId: null,
+            _playerSubId: null,
+            _remotePlayerSubIds: [],
+            remotePlayerStates: {},
+        });
     },
 
     // ─── Utility ─────────────────────────────────────────────
@@ -623,6 +920,7 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
             currentGameId: null,
             currentGameState: null,
             currentPlayerState: null,
+            playerStateSource: null,
             currentPlayerPDA: null,
             txSteps: [],
         });

@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 
 // ─── Game Constants ──────────────────────────────────────────
 pub const GO_BONUS: u64 = 200;
-pub const ROLL_COOLDOWN: i64 = 20; // seconds
+pub const ROLL_COOLDOWN: i64 = 10; // seconds
 pub const MIN_GO_COUNT_TO_END: u16 = 20;
 pub const MIN_GO_PASSES_FOR_WINNER: u16 = 15;
 pub const TAX_AMOUNT: u64 = 200;

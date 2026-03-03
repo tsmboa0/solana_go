@@ -4,7 +4,7 @@
 // Provides on-chain gameplay actions that run on the Ephemeral
 // Rollup using session keys. No wallet popups during gameplay.
 //
-// Actions: rollDice, buyProperty, performTileAction, endGame
+// Actions: rollDice, buyProperty, performTileAction, endGame, fetchPlayerState
 // ============================================================
 
 import { useCallback } from 'react';
@@ -15,9 +15,12 @@ import {
     getL1Connection,
     getERConnection,
     getProgram,
+    getERProgram,
     derivePlayerPDA,
 } from '@/anchor/setup';
-import { useBlockchainStore } from '@/stores/useBlockchainStore';
+// NOTE: Gameplay actions (rollDice, buyProperty, performTileAction) use the ER program
+// because all accounts are delegated to the ephemeral rollup.
+import { useBlockchainStore, type OnChainPlayerState } from '@/stores/useBlockchainStore';
 
 // ─── Hook ────────────────────────────────────────────────────
 
@@ -30,6 +33,8 @@ export interface GameActions {
     performTileAction: (tileIndex: number, chooseAction: boolean, ownerPDA?: PublicKey) => Promise<string | null>;
     /** End game — runs on ER, commits + undelegates back to L1 */
     endGame: () => Promise<string | null>;
+    /** Manually fetch current player state from PDA (backup to subscription) */
+    fetchPlayerState: () => Promise<OnChainPlayerState | null>;
     /** Whether actions are ready (session active, game subscribed) */
     isReady: boolean;
 }
@@ -50,20 +55,34 @@ export function useGameActions(session: SessionKeyState): GameActions {
     // ─── Roll Dice (VRF Request) ─────────────────────────────
     const rollDice = useCallback(async (clientSeed?: number): Promise<string | null> => {
         if (!wallet || !session.tempKeypair || !session.sessionTokenPDA || !currentGamePDA) {
-            console.error('[GameActions] Not ready for rollDice');
+            console.error('[GameActions] rollDice NOT READY:', {
+                wallet: !!wallet,
+                sessionActive: session.sessionActive,
+                tempKeypair: !!session.tempKeypair,
+                sessionTokenPDA: !!session.sessionTokenPDA,
+                gamePDA: !!currentGamePDA,
+            });
             return null;
         }
 
         try {
-            const l1Connection = getL1Connection();
-            const program = getProgram(l1Connection, wallet);
+            const erProgram = getERProgram(wallet);
             const [playerPDA] = derivePlayerPDA(currentGamePDA, wallet.publicKey);
 
             const seed = clientSeed ?? Math.floor(Math.random() * 255);
 
-            // Build the roll_dice instruction
+            console.log('[GameActions] rollDice accounts:', {
+                payer: session.tempKeypair.publicKey.toBase58(),
+                game: currentGamePDA.toBase58(),
+                player: playerPDA.toBase58(),
+                sessionToken: session.sessionTokenPDA.toBase58(),
+                wallet: wallet.publicKey.toBase58(),
+                seed,
+            });
+
+            // Build the roll_dice instruction using ER program
             // payer = tempKeypair (session signer), sessionToken = sessionTokenPDA
-            const tx = await program.methods
+            const tx = await erProgram.methods
                 .rollDice(seed)
                 .accountsPartial({
                     payer: session.tempKeypair.publicKey,
@@ -88,11 +107,17 @@ export function useGameActions(session: SessionKeyState): GameActions {
         }
 
         try {
-            const l1Connection = getL1Connection();
-            const program = getProgram(l1Connection, wallet);
+            const erProgram = getERProgram(wallet);
             const [playerPDA] = derivePlayerPDA(currentGamePDA, wallet.publicKey);
 
-            const tx = await program.methods
+            console.log('[GameActions] 🏠 buyProperty request:', {
+                tileIndex,
+                payer: session.tempKeypair.publicKey.toBase58(),
+                game: currentGamePDA.toBase58(),
+                player: playerPDA.toBase58(),
+            });
+
+            const tx = await erProgram.methods
                 .buyProperty(tileIndex)
                 .accountsPartial({
                     payer: session.tempKeypair.publicKey,
@@ -102,9 +127,11 @@ export function useGameActions(session: SessionKeyState): GameActions {
                 })
                 .transaction();
 
-            return await session.sendERTransaction(tx);
+            const sig = await session.sendERTransaction(tx);
+            console.log('[GameActions] ✅ buyProperty confirmed:', sig, '(tile:', tileIndex, ')');
+            return sig;
         } catch (err: any) {
-            console.error('[GameActions] buyProperty failed:', err);
+            console.error('[GameActions] ❌ buyProperty failed:', err);
             return null;
         }
     }, [wallet, session, currentGamePDA]);
@@ -123,11 +150,17 @@ export function useGameActions(session: SessionKeyState): GameActions {
         }
 
         try {
-            const l1Connection = getL1Connection();
-            const program = getProgram(l1Connection, wallet);
+            const erProgram = getERProgram(wallet);
             const [playerPDA] = derivePlayerPDA(currentGamePDA, wallet.publicKey);
 
-            let builder = program.methods
+            console.log('[GameActions] 🔗 performTileAction request:', {
+                tileIndex,
+                chooseAction,
+                ownerPDA: ownerPDA?.toBase58() ?? 'none',
+                payer: session.tempKeypair.publicKey.toBase58(),
+            });
+
+            let builder = erProgram.methods
                 .performTileAction(tileIndex, chooseAction)
                 .accountsPartial({
                     payer: session.tempKeypair.publicKey,
@@ -148,9 +181,11 @@ export function useGameActions(session: SessionKeyState): GameActions {
             }
 
             const tx = await builder.transaction();
-            return await session.sendERTransaction(tx);
+            const sig = await session.sendERTransaction(tx);
+            console.log('[GameActions] ✅ performTileAction confirmed:', sig, '(tile:', tileIndex, ', choose:', chooseAction, ')');
+            return sig;
         } catch (err: any) {
-            console.error('[GameActions] performTileAction failed:', err);
+            console.error('[GameActions] ❌ performTileAction failed:', err);
             return null;
         }
     }, [wallet, session, currentGamePDA]);
@@ -212,11 +247,49 @@ export function useGameActions(session: SessionKeyState): GameActions {
         }
     }, [wallet, currentGamePDA, currentGameId]);
 
+    // ─── Fetch Player State (Manual PDA Check) ───────────────
+    const fetchPlayerState = useCallback(async (): Promise<OnChainPlayerState | null> => {
+        if (!wallet || !currentGamePDA) {
+            console.error('[GameActions] Not ready for fetchPlayerState');
+            return null;
+        }
+
+        try {
+            const [playerPDA] = derivePlayerPDA(currentGamePDA, wallet.publicKey);
+
+            // Try ER first, then L1
+            try {
+                const erProgram = getERProgram(wallet);
+                const playerState = await (erProgram.account as any).playerState.fetch(playerPDA);
+                console.log('[GameActions] 📋 fetchPlayerState (ER):', {
+                    dice: playerState.lastDiceResult,
+                    position: playerState.currentPosition,
+                    balance: playerState.balance?.toString(),
+                });
+                return playerState as OnChainPlayerState;
+            } catch {
+                const l1Connection = getL1Connection();
+                const program = getProgram(l1Connection, wallet);
+                const playerState = await (program.account as any).playerState.fetch(playerPDA);
+                console.log('[GameActions] 📋 fetchPlayerState (L1):', {
+                    dice: playerState.lastDiceResult,
+                    position: playerState.currentPosition,
+                    balance: playerState.balance?.toString(),
+                });
+                return playerState as OnChainPlayerState;
+            }
+        } catch (err: any) {
+            console.error('[GameActions] fetchPlayerState failed:', err);
+            return null;
+        }
+    }, [wallet, currentGamePDA]);
+
     return {
         rollDice,
         buyProperty,
         performTileAction,
         endGame,
+        fetchPlayerState,
         isReady,
     };
 }

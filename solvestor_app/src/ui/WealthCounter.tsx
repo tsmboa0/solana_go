@@ -12,9 +12,10 @@ import { formatCurrency } from '@/utils/formatters';
 interface WealthCounterProps {
     value: number;
     className?: string;
+    style?: React.CSSProperties;
 }
 
-export function WealthCounter({ value, className = '' }: WealthCounterProps) {
+export function WealthCounter({ value, className = '', style }: WealthCounterProps) {
     const [displayValue, setDisplayValue] = useState(value);
     const [flash, setFlash] = useState<'gain' | 'loss' | null>(null);
     const previousValue = useRef(value);
@@ -64,6 +65,7 @@ export function WealthCounter({ value, className = '' }: WealthCounterProps) {
             <motion.span
                 key={flash}
                 className={`font-mono font-bold tabular-nums ${flashColor} ${className}`}
+                style={style}
                 initial={flash ? { scale: 1.15 } : false}
                 animate={{ scale: 1 }}
                 transition={{ duration: 0.3 }}

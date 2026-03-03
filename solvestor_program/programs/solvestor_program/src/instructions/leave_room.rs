@@ -1,28 +1,39 @@
 use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::anchor::commit;
 use ephemeral_rollups_sdk::ephem::commit_and_undelegate_accounts;
+use session_keys::{session_auth_or, Session, SessionError, SessionToken};
 
 use crate::state::{GameState, PlayerState, PLAYER_SEED};
 use crate::errors::GameErrorCode;
 
 #[commit]
-#[derive(Accounts)]
+#[derive(Accounts, Session)]
 pub struct LeaveRoom<'info> {
     #[account(mut)]
-    pub user: Signer<'info>,
+    pub payer: Signer<'info>,
 
     #[account(mut)]
     pub game: Box<Account<'info, GameState>>,
 
     #[account(
         mut,
-        seeds = [PLAYER_SEED, game.key().as_ref(), user.key().as_ref()],
+        seeds = [PLAYER_SEED, game.key().as_ref(), player.user.as_ref()],
         bump = player.bump,
-        constraint = player.user == user.key() @ GameErrorCode::Unauthorized,
+        constraint = player.is_active @ GameErrorCode::PlayerNotActive,
     )]
     pub player: Account<'info, PlayerState>,
+
+    #[session(
+        signer = payer,
+        authority = player.user.key()
+    )]
+    pub session_token: Option<Account<'info, SessionToken>>,
 }
 
+#[session_auth_or(
+    ctx.accounts.player.user == ctx.accounts.payer.key(),
+    SessionError::InvalidToken
+)]
 pub fn leave_room(ctx: Context<LeaveRoom>) -> Result<()> {
     let game = &mut ctx.accounts.game;
     let player = &mut ctx.accounts.player;
@@ -30,7 +41,7 @@ pub fn leave_room(ctx: Context<LeaveRoom>) -> Result<()> {
     require!(player.is_active, GameErrorCode::PlayerNotActive);
 
     // Remove player from the game's player array
-    let player_key = ctx.accounts.user.key();
+    let player_key = player.user;
     for i in 0..10 {
         if game.players[i] == player_key {
             game.players[i] = Pubkey::default();
@@ -63,8 +74,9 @@ pub fn leave_room(ctx: Context<LeaveRoom>) -> Result<()> {
     player.exit(&crate::ID)?;
 
     // Commit and undelegate the player account from the ER
+    // Use payer as the signer (works for both session key and direct wallet)
     commit_and_undelegate_accounts(
-        &ctx.accounts.user,
+        &ctx.accounts.payer,
         vec![&ctx.accounts.player.to_account_info()],
         &ctx.accounts.magic_context,
         &ctx.accounts.magic_program,

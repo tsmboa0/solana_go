@@ -14,6 +14,7 @@ import { INITIAL_PLAYERS } from '@/config/players';
 import { TILES } from '@/config/boardTiles';
 import { BOARD_SIZE, GO_SALARY, TAX_AMOUNT } from '@/config/game';
 import { PLAYER_COLORS } from '@/config/theme';
+import { shortenPubkey } from '@/anchor/setup';
 
 interface GameState {
     // --- State ---
@@ -89,8 +90,7 @@ const INITIAL_STATE = {
     localPlayerIndex: 0,
 };
 
-/** Player name pool for on-chain players */
-const PLAYER_NAMES = ['Whale Alpha', 'Degen Beta', 'Shark Gamma', 'Ape Delta'];
+
 
 export const useGameStore = create<GameState>()(
     persist(
@@ -238,6 +238,9 @@ export const useGameStore = create<GameState>()(
 
             setupExploreMode: () => {
                 set((state) => {
+                    // Always ensure beginner mode is off
+                    state.isBeginnerMode = false;
+
                     // Only reset if not already in explore mode (preserve state on refresh)
                     if (state.isExploreMode) {
                         // Already set up — just reset transient state
@@ -274,18 +277,12 @@ export const useGameStore = create<GameState>()(
 
             setupBeginnerMode: (localIndex, onChainPlayers) => {
                 set((state) => {
-                    // Already set up — just reset transient state
-                    if (state.isBeginnerMode && state.players.length === onChainPlayers.length) {
-                        state.phase = 'waiting';
-                        state.lastDiceResult = null;
-                        state.movingTileIndex = null;
-                        return;
-                    }
-
-                    // Map on-chain players to local Player objects
+                    // Always force-replace players with fresh on-chain data.
+                    // (Don't guard on player count — persisted stale data from
+                    // explore mode could cause mismatched tokens.)
                     const players: Player[] = onChainPlayers.map((p, i) => ({
                         id: p.pubkey,
-                        name: i === localIndex ? 'You' : (PLAYER_NAMES[i] || `Player ${i + 1}`),
+                        name: i === localIndex ? 'You' : shortenPubkey(p.pubkey),
                         color: PLAYER_COLORS[i] || '#888888',
                         position: p.position,
                         balance: p.balance,
@@ -304,6 +301,7 @@ export const useGameStore = create<GameState>()(
                     state.lastRollTime = null;
                     state.isExploreMode = false;
                     state.isBeginnerMode = true;
+                    state.movingTileIndex = null;
                 });
             },
 
@@ -360,16 +358,14 @@ export const useGameStore = create<GameState>()(
             name: 'solvestor-game-state',
             // Only persist the meaningful game state, not transient UI state
             partialize: (state) => ({
-                players: state.players,
-                currentPlayerIndex: state.currentPlayerIndex,
+                // Only persist game progress, NOT mode flags or player lists.
+                // Mode (beginner/explore) is determined fresh from URL on each load.
+                // Players are set by setupBeginnerMode/setupExploreMode from on-chain data.
                 ownedTiles: state.ownedTiles,
                 turnNumber: state.turnNumber,
-                isExploreMode: state.isExploreMode,
-                isBeginnerMode: state.isBeginnerMode,
-                localPlayerIndex: state.localPlayerIndex,
                 cooldownDuration: state.cooldownDuration,
-                // Don't persist: phase, lastDiceResult, movingTileIndex, lastRollTime
-                // These are transient and should start fresh on reload
+                // Don't persist: players, isBeginnerMode, isExploreMode, localPlayerIndex,
+                // phase, lastDiceResult, movingTileIndex, lastRollTime, currentPlayerIndex
             }),
         }
     )

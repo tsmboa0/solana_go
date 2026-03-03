@@ -13,6 +13,7 @@ import { useBlockchainStore } from '@/stores/useBlockchainStore';
 import type { OnChainGame, TransactionStep } from '@/stores/useBlockchainStore';
 import { CreateRoomModal } from '@/ui/CreateRoomModal';
 import { lamportsToSol } from '@/anchor/setup';
+import { buildSessionCreationIxs } from '@/hooks/useSessionKey';
 
 // ─── Status Helper ───────────────────────────────────────────
 
@@ -93,6 +94,7 @@ export function LobbyPage() {
     // Modal state
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [joiningGamePDA, setJoiningGamePDA] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
 
     // Fetch games on mount and every 10 seconds
     useEffect(() => {
@@ -109,7 +111,18 @@ export function LobbyPage() {
         clearError();
         setJoiningGamePDA(game.gamePDA.toBase58());
 
-        const success = await joinRoom(wallet, game.gamePDA, game);
+        // Build session creation instructions to bundle with delegation
+        let sessionParams;
+        try {
+            sessionParams = await buildSessionCreationIxs(
+                wallet.publicKey,
+                wallet
+            );
+        } catch (err: any) {
+            console.warn('[LobbyPage] Failed to build session ixs, proceeding without:', err);
+        }
+
+        const success = await joinRoom(wallet, game.gamePDA, game, sessionParams);
         if (success) {
             const params = new URLSearchParams({
                 gamePDA: game.gamePDA.toBase58(),
@@ -123,6 +136,13 @@ export function LobbyPage() {
     const joinableGames = activeGames.filter(
         (g) => !g.isStarted && !g.isEnded && g.playerCount < g.maxPlayers
     );
+
+    // Filter games by search query (matches PDA address)
+    const filteredGames = searchQuery.trim()
+        ? activeGames.filter((g) =>
+            g.gamePDA.toBase58().toLowerCase().includes(searchQuery.trim().toLowerCase())
+        )
+        : activeGames;
 
     return (
         <div
@@ -194,8 +214,100 @@ export function LobbyPage() {
                 </motion.button>
             </motion.div>
 
+            {/* Search Bar */}
+            <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.1 }}
+                style={{
+                    width: '100%',
+                    maxWidth: '800px',
+                    marginBottom: '20px',
+                    position: 'relative',
+                }}
+            >
+                <div style={{ position: 'relative' }}>
+                    <span style={{
+                        position: 'absolute',
+                        left: '14px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        fontSize: '0.9rem',
+                        color: '#8888a0',
+                        pointerEvents: 'none',
+                    }}>🔍</span>
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search by room PDA address..."
+                        style={{
+                            width: '100%',
+                            padding: '12px 40px 12px 40px',
+                            borderRadius: '16px',
+                            border: '1px solid rgba(255,255,255,0.6)',
+                            background: 'rgba(255, 255, 255, 0.5)',
+                            backdropFilter: 'blur(16px)',
+                            WebkitBackdropFilter: 'blur(16px)',
+                            fontSize: '0.82rem',
+                            fontWeight: 500,
+                            color: '#1a1a2e',
+                            fontFamily: "'Inter', monospace",
+                            outline: 'none',
+                            boxSizing: 'border-box',
+                            transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+                            boxShadow: '0 2px 12px rgba(0,0,0,0.03)',
+                        }}
+                        onFocus={(e) => {
+                            e.target.style.borderColor = 'rgba(153, 69, 255, 0.4)';
+                            e.target.style.boxShadow = '0 2px 16px rgba(153, 69, 255, 0.08)';
+                        }}
+                        onBlur={(e) => {
+                            e.target.style.borderColor = 'rgba(255,255,255,0.6)';
+                            e.target.style.boxShadow = '0 2px 12px rgba(0,0,0,0.03)';
+                        }}
+                    />
+                    {searchQuery && (
+                        <button
+                            onClick={() => setSearchQuery('')}
+                            style={{
+                                position: 'absolute',
+                                right: '12px',
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                                background: 'rgba(0,0,0,0.06)',
+                                border: 'none',
+                                borderRadius: '50%',
+                                width: '22px',
+                                height: '22px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                fontSize: '0.65rem',
+                                color: '#8888a0',
+                                fontWeight: 700,
+                            }}
+                        >
+                            ✕
+                        </button>
+                    )}
+                </div>
+                {searchQuery.trim() && (
+                    <div style={{
+                        marginTop: '6px',
+                        fontSize: '0.72rem',
+                        color: '#8888a0',
+                        fontWeight: 500,
+                        paddingLeft: '4px',
+                    }}>
+                        {filteredGames.length} result{filteredGames.length !== 1 ? 's' : ''} found
+                    </div>
+                )}
+            </motion.div>
+
             {/* Loading state */}
-            {isFetchingGames && activeGames.length === 0 && (
+            {isFetchingGames && filteredGames.length === 0 && !searchQuery.trim() && (
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -220,7 +332,7 @@ export function LobbyPage() {
             )}
 
             {/* Empty state */}
-            {!isFetchingGames && activeGames.length === 0 && (
+            {!isFetchingGames && filteredGames.length === 0 && (
                 <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -230,12 +342,16 @@ export function LobbyPage() {
                         maxWidth: '400px',
                     }}
                 >
-                    <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>🎮</div>
+                    <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>
+                        {searchQuery.trim() ? '🔎' : '🎮'}
+                    </div>
                     <p style={{ fontSize: '0.95rem', color: '#4a4a5a', fontWeight: 600, margin: '0 0 8px 0' }}>
-                        No games available
+                        {searchQuery.trim() ? 'No matching rooms' : 'No games available'}
                     </p>
                     <p style={{ fontSize: '0.8rem', color: '#8888a0', margin: 0 }}>
-                        Be the first to create a game and invite others to join!
+                        {searchQuery.trim()
+                            ? 'Try a different PDA address or clear the search'
+                            : 'Be the first to create a game and invite others to join!'}
                     </p>
                 </motion.div>
             )}
@@ -246,7 +362,7 @@ export function LobbyPage() {
             )}
 
             {/* Room cards grid */}
-            {activeGames.length > 0 && (
+            {filteredGames.length > 0 && (
                 <motion.div
                     variants={containerVariants}
                     initial="hidden"
@@ -259,7 +375,7 @@ export function LobbyPage() {
                         maxWidth: '800px',
                     }}
                 >
-                    {activeGames.map((game) => {
+                    {filteredGames.map((game) => {
                         const statusStyle = getStatusStyle(game);
                         const canJoin = !game.isStarted && !game.isEnded && game.playerCount < game.maxPlayers;
                         const isCurrentlyJoining = joiningGamePDA === game.gamePDA.toBase58();

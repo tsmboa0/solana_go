@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '@/stores/useUIStore';
 import { useGameStore, selectCurrentPlayer } from '@/stores/useGameStore';
 import { useBlockchainStore } from '@/stores/useBlockchainStore';
 import { useTileActions } from '@/hooks/useTileActions';
 import { useCoinConfetti } from '@/hooks/useCoinConfetti';
+import { useGameActionsContext } from '@/pages/GamePage';
 import { TILES } from '@/config/boardTiles';
 import { COLOR_GROUP_MAP } from '@/config/theme';
 import { formatCurrency } from '@/utils/formatters';
@@ -45,8 +47,10 @@ export function TileActionPopup() {
     const players = useGameStore((s) => s.players);
     const isBeginnerMode = useGameStore((s) => s.isBeginnerMode);
     const isExploreMode = useGameStore((s) => s.isExploreMode);
-    const { skipAction, executeAction, executeRent } = useTileActions();
+    const { skipAction, executeAction, executeRent, executeBuy } = useTileActions();
     const showCoinEffect = useCoinConfetti((s) => s.showCoinEffect);
+    const gameActionsCtx = useGameActionsContext();
+    const [isBuying, setIsBuying] = useState(false);
     const isAsyncMode = isBeginnerMode || isExploreMode;
 
     const isDark = theme === 'dark';
@@ -404,9 +408,12 @@ export function TileActionPopup() {
                                     disabled = true;
                                     btnClass = "bg-slate-500/40 text-slate-400 cursor-not-allowed border border-white/10";
                                 }
+                                if (isBuying && action.action_type === 'buy') {
+                                    disabled = true;
+                                }
 
                                 // Handle click
-                                const onClick = () => {
+                                const onClick = async () => {
                                     if (isChoice && choiceMeta && popupTileId !== null) {
                                         // Choice action — deduct cost + show confetti
                                         showCoinEffect(choiceMeta.cost, 'debit', `${action.label}`);
@@ -467,6 +474,24 @@ export function TileActionPopup() {
                                         executeRent(popupTileId!);
                                     } else if (action.action_type === 'pay_tax') {
                                         skipAction();
+                                    } else if (action.action_type === 'buy' && isBeginnerMode && gameActionsCtx?.actions) {
+                                        // ─── On-chain buy property (beginner mode) ───
+                                        setIsBuying(true);
+                                        try {
+                                            console.log(`[TileActionPopup] 🏠 Buying property on-chain: tile=${popupTileId}`);
+                                            const sig = await gameActionsCtx.actions.buyProperty(popupTileId!);
+                                            if (sig) {
+                                                console.log(`[TileActionPopup] ✅ Buy confirmed: ${sig}`);
+                                                // Apply local state after on-chain confirmation
+                                                executeBuy(popupTileId!);
+                                            } else {
+                                                console.error('[TileActionPopup] ❌ Buy tx returned null');
+                                                setIsBuying(false);
+                                            }
+                                        } catch (err) {
+                                            console.error('[TileActionPopup] ❌ Buy failed:', err);
+                                            setIsBuying(false);
+                                        }
                                     } else {
                                         executeAction(action.id, popupTileId!);
                                     }
@@ -492,7 +517,7 @@ export function TileActionPopup() {
                                         {action.action_type === 'continue' && !isPrimary && <X size={16} className="opacity-70" />}
                                         {action.action_type === 'continue' && isPrimary && <ArrowRight size={16} />}
 
-                                        <span className="truncate">{action.label}</span>
+                                        <span className="truncate">{isBuying && action.action_type === 'buy' ? 'Processing...' : action.label}</span>
                                         {choiceMeta && (
                                             <span className="opacity-60 text-[10px] ml-1">{choiceMeta.description}</span>
                                         )}

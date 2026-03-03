@@ -1,5 +1,5 @@
 {
-  "address": "HqicBmtY4WMbEVq2ZeLuWCUUr6VTTmfkJ6RGjFn3GLBo",
+  "address": "CGpK4bRB6DybtWXiTTHXaeoY8RGTCz3cPyHZShaboY23",
   "metadata": {
     "name": "solvestor_program",
     "version": "0.1.0",
@@ -274,38 +274,38 @@
             "program": {
               "kind": "const",
               "value": [
-                250,
-                53,
-                234,
-                25,
-                59,
-                54,
-                25,
-                144,
-                75,
-                158,
-                130,
-                198,
-                45,
-                132,
-                44,
-                138,
-                135,
-                158,
-                127,
-                156,
-                171,
-                198,
-                235,
-                54,
-                219,
-                107,
-                1,
-                158,
-                9,
-                27,
                 167,
-                54
+                125,
+                195,
+                117,
+                121,
+                27,
+                19,
+                3,
+                185,
+                191,
+                161,
+                32,
+                29,
+                252,
+                201,
+                38,
+                45,
+                228,
+                132,
+                148,
+                20,
+                220,
+                219,
+                215,
+                235,
+                66,
+                66,
+                20,
+                164,
+                225,
+                81,
+                8
               ]
             }
           }
@@ -409,7 +409,7 @@
         },
         {
           "name": "owner_program",
-          "address": "HqicBmtY4WMbEVq2ZeLuWCUUr6VTTmfkJ6RGjFn3GLBo"
+          "address": "CGpK4bRB6DybtWXiTTHXaeoY8RGTCz3cPyHZShaboY23"
         },
         {
           "name": "delegation_program",
@@ -469,38 +469,38 @@
             "program": {
               "kind": "const",
               "value": [
-                250,
-                53,
-                234,
-                25,
-                59,
-                54,
-                25,
-                144,
-                75,
-                158,
-                130,
-                198,
-                45,
-                132,
-                44,
-                138,
-                135,
-                158,
-                127,
-                156,
-                171,
-                198,
-                235,
-                54,
-                219,
-                107,
-                1,
-                158,
-                9,
-                27,
                 167,
-                54
+                125,
+                195,
+                117,
+                121,
+                27,
+                19,
+                3,
+                185,
+                191,
+                161,
+                32,
+                29,
+                252,
+                201,
+                38,
+                45,
+                228,
+                132,
+                148,
+                20,
+                220,
+                219,
+                215,
+                235,
+                66,
+                66,
+                20,
+                164,
+                225,
+                81,
+                8
               ]
             }
           }
@@ -607,7 +607,7 @@
         },
         {
           "name": "owner_program",
-          "address": "HqicBmtY4WMbEVq2ZeLuWCUUr6VTTmfkJ6RGjFn3GLBo"
+          "address": "CGpK4bRB6DybtWXiTTHXaeoY8RGTCz3cPyHZShaboY23"
         },
         {
           "name": "delegation_program",
@@ -758,7 +758,7 @@
       ],
       "accounts": [
         {
-          "name": "user",
+          "name": "payer",
           "writable": true,
           "signer": true
         },
@@ -788,10 +788,15 @@
               },
               {
                 "kind": "account",
-                "path": "user"
+                "path": "player.user",
+                "account": "PlayerState"
               }
             ]
           }
+        },
+        {
+          "name": "session_token",
+          "optional": true
         },
         {
           "name": "magic_program",

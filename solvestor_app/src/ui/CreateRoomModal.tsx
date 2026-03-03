@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAnchorWallet } from '@solana/wallet-adapter-react';
 import { useBlockchainStore } from '@/stores/useBlockchainStore';
 import type { TransactionStep } from '@/stores/useBlockchainStore';
+import { buildSessionCreationIxs } from '@/hooks/useSessionKey';
 
 // ─── Constants for Beginner Mode ─────────────────────────────
 
@@ -39,12 +40,23 @@ export function CreateRoomModal({ isOpen, onClose }: Props) {
         if (!wallet) return;
         clearError();
 
+        // Build session creation instructions to bundle with delegation
+        let sessionParams;
+        try {
+            sessionParams = await buildSessionCreationIxs(
+                wallet.publicKey,
+                wallet
+            );
+        } catch (err: any) {
+            console.warn('[CreateRoom] Failed to build session ixs, proceeding without:', err);
+        }
+
         const result = await createRoom(wallet, {
             maxPlayers,
             roundDuration,
             startCapital: BEGINNER_CAPITAL,
             stakeAmount: BEGINNER_STAKE * 1_000_000_000, // Convert to lamports
-        });
+        }, sessionParams);
 
         if (result) {
             // Navigate to game page with game PDA as query param

@@ -25,10 +25,9 @@ import { EndTurnButton } from '@/ui/EndTurnButton';
 import { RecenterButton } from '@/ui/RecenterButton';
 import { GameLoadingOverlay } from '@/ui/GameLoadingOverlay';
 import { WaitingOverlay } from '@/ui/WaitingOverlay';
-import { SessionSetupOverlay } from '@/ui/SessionSetupOverlay';
 import { CoinConfetti } from '@/ui/CoinConfetti';
 import { EventCard } from '@/ui/EventCard';
-
+import { GameInfoPanel } from '@/ui/GameInfoPanel';
 import { useUIStore } from '@/stores/useUIStore';
 import { useGameStore } from '@/stores/useGameStore';
 import { useBlockchainStore } from '@/stores/useBlockchainStore';
@@ -39,7 +38,7 @@ import { useSessionKey } from '@/hooks/useSessionKey';
 import { useGameActions } from '@/hooks/useGameActions';
 import type { SessionKeyState } from '@/hooks/useSessionKey';
 import type { GameActions } from '@/hooks/useGameActions';
-import { shortenPubkey } from '@/anchor/setup';
+import { shortenPubkey, getERProgram, derivePlayerPDA } from '@/anchor/setup';
 
 // ─── Game Actions Context (accessible by child components) ───
 
@@ -74,12 +73,9 @@ export function GamePage() {
     const currentGameState = useBlockchainStore((s) => s.currentGameState);
     const subscribeToGame = useBlockchainStore((s) => s.subscribeToGame);
     const subscribeToPlayer = useBlockchainStore((s) => s.subscribeToPlayer);
+    const subscribeToAllPlayers = useBlockchainStore((s) => s.subscribeToAllPlayers);
     const setCurrentGame = useBlockchainStore((s) => s.setCurrentGame);
     const unsubscribeAll = useBlockchainStore((s) => s.unsubscribeAll);
-
-    // Session keys + game actions (beginner mode only)
-    const session = useSessionKey();
-    const actions = useGameActions(session);
 
     // Parse game info from URL query params (for beginner mode)
     const gamePDAFromUrl = searchParams.get('gamePDA');
@@ -87,6 +83,10 @@ export function GamePage() {
 
     const isBeginner = mode === 'beginner';
     const isExplore = mode === 'explore';
+
+    // Session keys + game actions (beginner mode only — disabled in explore)
+    const session = useSessionKey(isBeginner);
+    const actions = useGameActions(session);
 
     // ─── Beginner mode: Restore game PDA from URL on mount/refresh ───
     useEffect(() => {
@@ -142,8 +142,17 @@ export function GamePage() {
         if (isBeginnerMode) return; // Already initialized
 
         // Find local wallet's index in the on-chain players array
-        const onChainPlayers = currentGameState.players;
-        const localIndex = onChainPlayers.findIndex(
+        // Filter out empty/default pubkeys (unfilled player slots)
+        const DEFAULT_PUBKEY = '11111111111111111111111111111111';
+        const allOnChainPlayers = currentGameState.players;
+        const realPlayers = allOnChainPlayers.filter((pk: any) => {
+            const pkStr = pk?.toBase58 ? pk.toBase58() : String(pk);
+            return pkStr !== DEFAULT_PUBKEY;
+        });
+
+        console.log('[GamePage] Real players:', realPlayers);
+
+        const localIndex = realPlayers.findIndex(
             (pk: any) => {
                 const pkStr = pk?.toBase58 ? pk.toBase58() : String(pk);
                 return pkStr === wallet.publicKey.toBase58();
@@ -151,22 +160,56 @@ export function GamePage() {
         );
 
         if (localIndex === -1) {
-            console.error('Local wallet not found in on-chain players array');
+            console.error('[GamePage] Local wallet not found in on-chain players array');
             return;
         }
 
-        // Map on-chain players to setupBeginnerMode format
-        const playerData = onChainPlayers.map((pk: any) => ({
-            pubkey: pk?.toBase58 ? pk.toBase58() : String(pk),
-            balance: typeof currentGameState.startCapital?.toNumber === 'function'
-                ? currentGameState.startCapital.toNumber()
-                : Number(currentGameState.startCapital || 1500),
-            position: 0,
-        }));
+        // Fetch each player's actual state from the ER (handles refresh mid-game)
+        const gamePDA = currentGamePDA!;
+        const erProgram = getERProgram(wallet);
 
-        setupBeginnerMode(localIndex, playerData);
-        console.log(`[GamePage] Beginner mode initialized. Local player index: ${localIndex}`);
-    }, [isBeginner, wallet, currentGameState, isBeginnerMode, setupBeginnerMode]);
+        const fetchAndInit = async () => {
+            const startBal = typeof currentGameState.startCapital?.toNumber === 'function'
+                ? currentGameState.startCapital.toNumber()
+                : Number(currentGameState.startCapital || 1500);
+
+            const playerData = await Promise.all(
+                realPlayers.map(async (pk: any) => {
+                    const pubkeyStr = pk?.toBase58 ? pk.toBase58() : String(pk);
+                    const playerPubkey = new PublicKey(pubkeyStr);
+                    const [playerPDA] = derivePlayerPDA(gamePDA, playerPubkey);
+
+                    try {
+                        const state = await (erProgram.account as any).playerState.fetch(playerPDA);
+                        const pos = typeof state.currentPosition === 'number'
+                            ? state.currentPosition
+                            : Number(state.currentPosition ?? 0);
+                        const bal = typeof state.balance?.toNumber === 'function'
+                            ? state.balance.toNumber()
+                            : Number(state.balance ?? startBal);
+
+                        console.log(`[GamePage] Fetched player ${pubkeyStr.slice(0, 8)}: pos=${pos}, bal=${bal}`);
+                        return { pubkey: pubkeyStr, balance: bal, position: pos };
+                    } catch (err) {
+                        console.warn(`[GamePage] Could not fetch player ${pubkeyStr.slice(0, 8)} from ER, using defaults:`, err);
+                        return { pubkey: pubkeyStr, balance: startBal, position: 0 };
+                    }
+                })
+            );
+
+            setupBeginnerMode(localIndex, playerData);
+
+            // Subscribe to ALL players' on-chain PDAs for multiplayer sync
+            // (subscribeToAllPlayers auto-skips the local player)
+            subscribeToAllPlayers(wallet, gamePDA, realPlayers);
+
+            console.log(`[GamePage] Beginner mode initialized. ${realPlayers.length} players, local index: ${localIndex}`);
+        };
+
+        fetchAndInit().catch((err) => {
+            console.error('[GamePage] Failed to initialize beginner mode:', err);
+        });
+    }, [isBeginner, wallet, currentGameState, isBeginnerMode, setupBeginnerMode, subscribeToAllPlayers, currentGamePDA]);
 
     // ─── Beginner mode: Bridge fire-and-forget performTileAction events ───
     useEffect(() => {
@@ -182,6 +225,56 @@ export function GamePage() {
         window.addEventListener('solvestor:performTileAction', handler);
         return () => window.removeEventListener('solvestor:performTileAction', handler);
     }, [isBeginner, actions]);
+
+    // ─── Beginner mode: Poll game + player state from ER every 5s ───
+    useEffect(() => {
+        if (!isBeginner || !wallet || !currentGamePDA) return;
+
+        const pollInterval = setInterval(async () => {
+            try {
+                const erProgram = getERProgram(wallet);
+                const [playerPDA] = derivePlayerPDA(currentGamePDA, wallet.publicKey);
+
+                // Fetch player state from ER
+                const playerState = await (erProgram.account as any).playerState.fetch(playerPDA);
+                const balance = typeof playerState.balance === 'object' && 'toNumber' in playerState.balance
+                    ? playerState.balance.toNumber()
+                    : Number(playerState.balance);
+
+                console.log('[Poll] 📊 ER Player State:', {
+                    dice: `[${playerState.lastDiceResult[0]}, ${playerState.lastDiceResult[1]}]`,
+                    position: playerState.currentPosition,
+                    balance,
+                    goCount: playerState.goCount,
+                    hasShield: playerState.hasShield,
+                    isInGraveyard: playerState.isInGraveyard,
+                });
+
+                // Also update the store with fresh ER data
+                useBlockchainStore.setState({
+                    currentPlayerState: playerState,
+                    playerStateSource: 'poll' as any, // distinct from 'subscription' for debugging
+                });
+
+                // Fetch game state from ER
+                const gameState = await (erProgram.account as any).gameState.fetch(currentGamePDA);
+                console.log('[Poll] 📊 ER Game State:', {
+                    isStarted: gameState.isStarted,
+                    isEnded: gameState.isEnded,
+                    playerCount: gameState.playerCount,
+                    turnCount: gameState.turnCount,
+                });
+            } catch (err) {
+                console.warn('[Poll] ER poll failed:', err);
+            }
+        }, 15000);
+
+        console.log('[Poll] ✅ Started 15s polling for ER game + player state');
+        return () => {
+            clearInterval(pollInterval);
+            console.log('[Poll] ⏹ Stopped ER polling');
+        };
+    }, [isBeginner, wallet, currentGamePDA]);
 
     // ─── Rush teleport handler (event card teleportation) ───
     useEffect(() => {
@@ -200,11 +293,6 @@ export function GamePage() {
         return !currentGameState.isStarted && !currentGameState.isEnded;
     }, [isBeginner, currentGameState]);
 
-    // Show session setup overlay when game is started but session not yet created
-    const showSessionSetup = useMemo(() => {
-        if (!isBeginner || !currentGameState) return false;
-        return currentGameState.isStarted && !session.sessionActive && !session.isSessionLoading;
-    }, [isBeginner, currentGameState, session.sessionActive, session.isSessionLoading]);
 
     const roomCode = currentGamePDA ? shortenPubkey(currentGamePDA, 6) : '';
 
@@ -232,6 +320,7 @@ export function GamePage() {
                 <PortfolioModal />
                 <EndTurnButton />
                 <RecenterButton />
+                <GameInfoPanel />
 
                 {/* Coin confetti overlay (beginner mode optimistic effects) */}
                 <CoinConfetti />
@@ -251,16 +340,7 @@ export function GamePage() {
                     )}
                 </AnimatePresence>
 
-                {/* Session setup overlay — shown when game starts but session not active */}
-                <AnimatePresence>
-                    {showSessionSetup && (
-                        <SessionSetupOverlay
-                            onCreateSession={session.createSession}
-                            isLoading={session.isSessionLoading}
-                            error={session.sessionError}
-                        />
-                    )}
-                </AnimatePresence>
+
             </div>
         </GameActionsContext.Provider>
     );

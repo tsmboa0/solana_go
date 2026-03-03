@@ -6,14 +6,14 @@
 // ============================================================
 
 import { Program, AnchorProvider, BN } from '@coral-xyz/anchor';
-import { Connection, PublicKey, clusterApiUrl } from '@solana/web3.js';
+import { Connection, PublicKey } from '@solana/web3.js';
 import type { AnchorWallet } from '@solana/wallet-adapter-react';
 
 import idl from './idl/solvestor_program.json';
 
 // ─── Constants ───────────────────────────────────────────────
 
-export const PROGRAM_ID = new PublicKey('HqicBmtY4WMbEVq2ZeLuWCUUr6VTTmfkJ6RGjFn3GLBo');
+export const PROGRAM_ID = new PublicKey('CGpK4bRB6DybtWXiTTHXaeoY8RGTCz3cPyHZShaboY23');
 
 export const GAME_SEED = 'game';
 export const PLAYER_SEED = 'player';
@@ -26,8 +26,8 @@ export const ER_WS_ENDPOINT = 'wss://devnet-eu.magicblock.app/';
 /** EU Validator for delegation remainingAccounts */
 export const EU_VALIDATOR = new PublicKey('MEUGGrYPxKk17hCr7wpT6s8dtNokZj5U2L57vjYMS8e');
 
-/** Devnet RPC (same as Anchor.toml) */
-export const DEVNET_ENDPOINT = clusterApiUrl('devnet');
+/** Devnet RPC (Vite exposes VITE_-prefixed env vars via import.meta.env) */
+export const DEVNET_ENDPOINT = (import.meta as any).env?.VITE_RPC_URL || 'https://devnet.solana.com';
 
 // ─── Connection Singletons ───────────────────────────────────
 

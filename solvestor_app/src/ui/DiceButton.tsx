@@ -2,24 +2,24 @@
 // GO Button — Solvestor (SWS)
 // ============================================================
 // Clean, glassmorphic dice roll button at bottom center.
-// Shows GO when ready, circular cooldown ring when waiting,
-// and animated dice when rolling.
+// Shows GO when ready, rotating 🎲 during VRF wait,
+// animated dice when rolling, cooldown ring between turns.
 // ============================================================
 
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useGameStore } from '@/stores/useGameStore';
 import { useUIStore } from '@/stores/useUIStore';
-import { useBlockchainStore } from '@/stores/useBlockchainStore';
 import { useDiceRoll } from '@/hooks/useDiceRoll';
 import { useGameActionsContext } from '@/pages/GamePage';
 import { soundManager } from '@/utils/SoundManager';
+
+const VRF_TIMEOUT_MS = 30_000; // 30 seconds max wait for VRF
 
 export function DiceButton() {
     const phase = useGameStore((s) => s.phase);
     const isDiceAnimating = useUIStore((s) => s.isDiceAnimating);
     const lastDiceResult = useGameStore((s) => s.lastDiceResult);
-    const { performRoll } = useDiceRoll();
 
     const currentPlayer = useGameStore((s) => s.players[s.currentPlayerIndex]);
     const isExploreMode = useGameStore((s) => s.isExploreMode);
@@ -53,13 +53,19 @@ export function DiceButton() {
 
     const gameActionsCtx = useGameActionsContext();
 
+    // Pass game actions to useDiceRoll so it can call performTileAction directly
+    const { performRoll } = useDiceRoll({
+        gameActions: gameActionsCtx?.actions ?? null,
+    });
+
     // VRF pending state for beginner mode
     const [isPendingVRF, setIsPendingVRF] = useState(false);
-    const currentPlayerState = useBlockchainStore((s) => s.currentPlayerState);
-    const prevDiceResultRef = useRef<string | null>(null);
+    const vrfTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // In async mode: ignore phase (others can change it), only care about isDiceAnimating
-    const isAnimating = isAsyncMode ? (isDiceAnimating || isPendingVRF) : (phase === 'rolling' || phase === 'moving' || isDiceAnimating);
+    // In async mode: isDiceAnimating = actual dice physics running
+    const isAnimating = isAsyncMode
+        ? isDiceAnimating // Only during physics, NOT during VRF wait
+        : (phase === 'rolling' || phase === 'moving' || isDiceAnimating);
     const canRoll = isAsyncMode ? !isOnCooldown && !isDiceAnimating && !isPendingVRF : (phase === 'waiting' && !isDiceAnimating && !isCPUTurn && !isOnCooldown);
 
     // Cooldown ring
@@ -69,16 +75,31 @@ export function DiceButton() {
     const strokeDashoffset = circumference * (1 - cooldownProgress);
     const cooldownSeconds = Math.ceil(cooldownRemaining / 1000);
 
-    // Detect VRF result arrival (clear pending state)
+    // Detect VRF result arrival — simply watch isDiceAnimating
+    // When useDiceRoll detects VRF, it calls setDiceAnimating(true), so isPendingVRF should clear
     useEffect(() => {
-        if (!isBeginnerMode || !isPendingVRF || !currentPlayerState) return;
+        if (!isBeginnerMode || !isPendingVRF) return;
 
-        const currentResult = JSON.stringify(currentPlayerState.lastDiceResult);
-        if (prevDiceResultRef.current !== null && currentResult !== prevDiceResultRef.current) {
-            // VRF result arrived!
+        // Once dice start animating, VRF has arrived
+        if (isDiceAnimating) {
+            console.log('[DiceButton] ✅ VRF result arrived — dice animation starting');
             setIsPendingVRF(false);
+            // Clear timeout
+            if (vrfTimeoutRef.current) {
+                clearTimeout(vrfTimeoutRef.current);
+                vrfTimeoutRef.current = null;
+            }
         }
-    }, [isBeginnerMode, isPendingVRF, currentPlayerState]);
+    }, [isBeginnerMode, isPendingVRF, isDiceAnimating]);
+
+    // Clean up timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (vrfTimeoutRef.current) {
+                clearTimeout(vrfTimeoutRef.current);
+            }
+        };
+    }, []);
 
     const handleRollClick = async () => {
         if (!canRoll || isPendingVRF) return;
@@ -87,20 +108,48 @@ export function DiceButton() {
         if (isAsyncMode) startCooldown();
 
         if (isBeginnerMode && gameActionsCtx?.actions) {
-            // Beginner mode: send on-chain roll_dice, then start pending animation
+            // Beginner mode: send on-chain roll_dice
+            console.log('[DiceButton] 🎯 GO pressed — sending VRF request...');
             setIsPendingVRF(true);
-            prevDiceResultRef.current = currentPlayerState
-                ? JSON.stringify(currentPlayerState.lastDiceResult)
-                : null;
 
-            // Start the pending dice animation locally
+            // Start the local phase tracking
             performRoll();
 
-            // Send on-chain VRF request (fire-and-forget)
-            gameActionsCtx.actions.rollDice().catch((err) => {
+            // Set VRF timeout
+            vrfTimeoutRef.current = setTimeout(() => {
+                console.error('[DiceButton] ⏰ VRF timeout after 30s — resetting');
+                setIsPendingVRF(false);
+                useGameStore.getState().setPhase('waiting');
+            }, VRF_TIMEOUT_MS);
+
+            // Send on-chain VRF request
+            try {
+                const txSig = await gameActionsCtx.actions.rollDice();
+                if (txSig) {
+                    console.log('[DiceButton] ✅ VRF request tx confirmed:', txSig);
+                    console.log('[DiceButton] ⏳ Waiting for VRF callback via subscription/polling...');
+                    // NOTE: We do NOT manually fetch player state here.
+                    // The VRF *request* tx confirms before the VRF *callback* fires.
+                    // Fetching here would read stale dice values and poison the VRF detection.
+                    // The subscription + polling in GamePage will pick up the VRF result.
+                } else {
+                    console.error('[DiceButton] VRF tx returned null — rollDice failed');
+                    setIsPendingVRF(false);
+                    useGameStore.getState().setPhase('waiting');
+                    if (vrfTimeoutRef.current) {
+                        clearTimeout(vrfTimeoutRef.current);
+                        vrfTimeoutRef.current = null;
+                    }
+                }
+            } catch (err) {
                 console.error('[DiceButton] On-chain rollDice failed:', err);
                 setIsPendingVRF(false);
-            });
+                useGameStore.getState().setPhase('waiting');
+                if (vrfTimeoutRef.current) {
+                    clearTimeout(vrfTimeoutRef.current);
+                    vrfTimeoutRef.current = null;
+                }
+            }
         } else {
             // Explore mode: local random dice
             performRoll();
@@ -286,6 +335,15 @@ export function DiceButton() {
                             animate={{ rotate: [0, 15, -15, 0] }}
                             transition={{ duration: 0.5, repeat: Infinity }}
                             style={{ fontSize: '1.8rem', position: 'relative' }}
+                        >
+                            🎲
+                        </motion.div>
+                    ) : isPendingVRF ? (
+                        // Rotating dice emoji during VRF wait
+                        <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
+                            style={{ position: 'relative', fontSize: '1.8rem' }}
                         >
                             🎲
                         </motion.div>

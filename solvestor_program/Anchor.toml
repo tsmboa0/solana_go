@@ -6,10 +6,10 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-solvestor_program = "HqicBmtY4WMbEVq2ZeLuWCUUr6VTTmfkJ6RGjFn3GLBo"
+solvestor_program = "CGpK4bRB6DybtWXiTTHXaeoY8RGTCz3cPyHZShaboY23"
 
 [programs.localnet]
-solvestor_program = "HqicBmtY4WMbEVq2ZeLuWCUUr6VTTmfkJ6RGjFn3GLBo"
+solvestor_program = "CGpK4bRB6DybtWXiTTHXaeoY8RGTCz3cPyHZShaboY23"
 
 [registry]
 url = "https://api.apr.dev"

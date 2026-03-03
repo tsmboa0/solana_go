@@ -6,7 +6,7 @@
 // ============================================================
 
 import { useMemo, type ReactNode } from 'react';
-import { clusterApiUrl } from '@solana/web3.js';
+// clusterApiUrl removed — using Helius directly for reliability
 import {
     ConnectionProvider,
     WalletProvider,
@@ -21,7 +21,7 @@ interface Props {
 }
 
 export function SolanaWalletProvider({ children }: Props) {
-    const endpoint = useMemo(() => clusterApiUrl('devnet'), []);
+    const endpoint = useMemo(() => 'https://devnet.helius-rpc.com/?api-key=193b6782-795f-4f9f-a39c-838bfc136663', []);
 
     // Wallet adapters auto-detect installed wallets (Phantom, Solflare, etc.)
     const wallets = useMemo(() => [], []);

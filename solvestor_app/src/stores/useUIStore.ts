@@ -48,6 +48,10 @@ interface UIState {
     // --- Dice settled signal (from physics engine) ---
     isDiceSettled: boolean;
     setDiceSettled: (settled: boolean) => void;
+
+    // --- Game Info Panel ---
+    isGameInfoOpen: boolean;
+    toggleGameInfo: () => void;
 }
 
 export const useUIStore = create<UIState>()((set) => ({
@@ -95,4 +99,8 @@ export const useUIStore = create<UIState>()((set) => ({
     // Dice settled signal
     isDiceSettled: false,
     setDiceSettled: (settled: boolean) => set({ isDiceSettled: settled }),
+
+    // Game Info Panel
+    isGameInfoOpen: false,
+    toggleGameInfo: () => set((s) => ({ isGameInfoOpen: !s.isGameInfoOpen })),
 }));

@@ -191,6 +191,7 @@ export interface Player {
 /** Phases of a single turn */
 export type GamePhase =
     | 'waiting'     // Waiting for dice roll
+    | 'vrfPending'  // VRF requested, waiting for on-chain result (no 3D dice)
     | 'rolling'     // Dice animation playing
     | 'moving'      // Token animating tile-by-tile
     | 'landed'      // Token landed, camera zooming in

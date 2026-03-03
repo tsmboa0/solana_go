@@ -14,9 +14,9 @@
 //   1. Click GO → send roll_dice on-chain (VRF request)
 //   2. Show pending animation while waiting for VRF callback
 //   3. VRF callback updates PlayerState.lastDiceResult + currentPosition
-//   4. Detect the change → feed result into dice physics
+//   4. Detect the change via vrfRequested flag (not JSON comparison)
 //   5. Dice settle → move token → handle landing
-//   6. Landing → predictTileAction() + fire on-chain in background
+//   6. Landing → predictTileAction() + fire on-chain performTileAction
 // ============================================================
 
 import { useCallback, useEffect, useRef } from 'react';
@@ -28,6 +28,7 @@ import { TOKEN_STEP_DURATION, POPUP_ACTION_DELAY_MS, BOARD_SIZE } from '@/config
 import { TILES } from '@/config/boardTiles';
 import { predictTileAction, type PlayerLocalState, type TileActionResult } from '@/engine/tileActionMirror';
 import { useCoinConfetti } from '@/hooks/useCoinConfetti';
+import type { GameActions } from '@/hooks/useGameActions';
 
 // Tiles that only show EventCard once, then auto-resolve with confetti
 const SEEN_ONCE_TILES = new Set([4, 10, 20, 22, 30, 36]); // Tax, Graveyard, Grant, MEV Bot, Liquidation, MEV Sandwich
@@ -50,13 +51,22 @@ function isTileSeen(tileIndex: number): boolean {
     return getSeenTiles().has(tileIndex);
 }
 
-export function useDiceRoll() {
+/** Options for the dice roll hook */
+interface UseDiceRollOptions {
+    /** Game actions for direct on-chain calls (beginner mode) */
+    gameActions?: GameActions | null;
+}
+
+export function useDiceRoll(options?: UseDiceRollOptions) {
+    const gameActions = options?.gameActions ?? null;
+
     const rollDice = useGameStore((s) => s.rollDice);
     const movePlayer = useGameStore((s) => s.movePlayer);
     const setPhase = useGameStore((s) => s.setPhase);
     const getCurrentPlayer = useGameStore((s) => s.getCurrentPlayer);
     const setDiceAnimating = useUIStore((s) => s.setDiceAnimating);
     const isDiceSettled = useUIStore((s) => s.isDiceSettled);
+    const setDiceSettled = useUIStore((s) => s.setDiceSettled);
     const zoomOnLand = useCameraStore((s) => s.zoomOnLand);
     const showPopup = useUIStore((s) => s.showPopup);
     const showEventCard = useUIStore((s) => s.showEventCard);
@@ -70,21 +80,36 @@ export function useDiceRoll() {
     // Store the pending roll result so we can continue after settlement
     const pendingResult = useRef<{ playerId: string; total: number } | null>(null);
 
-    // ─── Beginner mode: track VRF state ───
-    const isWaitingVRF = useRef(false);
-    const prevDiceResult = useRef<string | null>(null);
+    // ─── Beginner mode: VRF state ───
+    // Use a flag instead of JSON comparison to handle same-dice-result edge case
+    const vrfRequested = useRef(false);
     const prevPosition = useRef<number | null>(null);
+    const prevRollTimestamp = useRef<string | null>(null); // store timestamp at VRF request time (BN.toString())
+    const vrfStateChangeCount = useRef(0); // track subscription fires
 
     // ─── performRoll ─────────────────────────────────────────
     const performRoll = useCallback(() => {
         if (isBeginnerMode) {
-            isWaitingVRF.current = true;
-            if (currentPlayerState) {
-                prevDiceResult.current = JSON.stringify(currentPlayerState.lastDiceResult);
-                prevPosition.current = currentPlayerState.currentPosition;
-            }
-            setPhase('rolling');
-            setDiceAnimating(true);
+            // Beginner mode: just record current state and set flag.
+            // Dice animation starts AFTER VRF result arrives (not here).
+            const prevDice = currentPlayerState?.lastDiceResult;
+            const prevPos = currentPlayerState?.currentPosition;
+            const prevTs = currentPlayerState?.lastRollTimestamp?.toString() ?? '0';
+
+            console.log('[Dice] 🎯 GO pressed (Beginner mode)');
+            console.log('[Dice]   Previous dice result:', prevDice ? `[${prevDice[0]}, ${prevDice[1]}]` : 'none');
+            console.log('[Dice]   Previous position:', prevPos ?? 'unknown');
+            console.log('[Dice]   Previous roll timestamp:', prevTs);
+
+            vrfRequested.current = true;
+            vrfStateChangeCount.current = 0;
+            prevPosition.current = prevPos ?? null;
+            prevRollTimestamp.current = prevTs;
+
+            setPhase('vrfPending');
+            // NOTE: Do NOT call setDiceAnimating(true) here.
+            // We wait for VRF result, then start dice physics with the real values.
+            console.log('[Dice]   ⏳ Waiting for VRF result...');
             return;
         }
 
@@ -104,45 +129,78 @@ export function useDiceRoll() {
             }
         }
 
+        // Reset settled flag BEFORE triggering animation to prevent
+        // the 'watch for settle' effect from firing prematurely
+        setDiceSettled(false);
         setDiceAnimating(true);
         pendingResult.current = { playerId: player.id, total: finalSteps };
     }, [isBeginnerMode, rollDice, getCurrentPlayer, setDiceAnimating, setPhase, currentPlayerState]);
 
     // ─── Beginner mode: Watch for VRF callback ───────────────
+    // Uses vrfRequested flag instead of JSON comparison.
+    // Accepts when lastRollTimestamp changes (guaranteed unique per VRF callback).
     useEffect(() => {
-        if (!isBeginnerMode || !isWaitingVRF.current || !currentPlayerState) return;
+        if (!isBeginnerMode || !vrfRequested.current || !currentPlayerState) return;
 
-        const currentResult = JSON.stringify(currentPlayerState.lastDiceResult);
-        const currentPos = currentPlayerState.currentPosition;
+        // Track how many times subscription has fired
+        vrfStateChangeCount.current += 1;
+        const changeNum = vrfStateChangeCount.current;
 
-        if (prevDiceResult.current !== null && currentResult !== prevDiceResult.current) {
-            isWaitingVRF.current = false;
+        const die1 = currentPlayerState.lastDiceResult[0];
+        const die2 = currentPlayerState.lastDiceResult[1];
+        const total = die1 + die2;
+        const newPos = currentPlayerState.currentPosition;
+        const oldPos = prevPosition.current ?? 0;
+        const newTs = currentPlayerState.lastRollTimestamp?.toString() ?? '0';
 
-            const die1 = currentPlayerState.lastDiceResult[0];
-            const die2 = currentPlayerState.lastDiceResult[1];
-            const total = die1 + die2;
+        const source = useBlockchainStore.getState().playerStateSource ?? 'unknown';
 
-            const oldPos = prevPosition.current ?? 0;
-            const newPos = currentPos;
-            let steps: number;
-            if (newPos >= oldPos) {
-                steps = newPos - oldPos;
-            } else {
-                steps = (BOARD_SIZE - oldPos) + newPos;
-            }
+        console.log(`[VRF] 📡 Player state updated (change #${changeNum}) — source: ${source}`);
+        console.log(`[VRF]   Dice: [${die1}, ${die2}] = ${total}`);
+        console.log(`[VRF]   Position: ${oldPos} → ${newPos}`);
+        console.log(`[VRF]   Timestamp: ${prevRollTimestamp.current} → ${newTs}`);
 
-            console.log(`[VRF] Dice result: ${die1} + ${die2} = ${total}, Steps: ${steps}, NewPos: ${newPos}`);
-
-            const player = getCurrentPlayer();
-            useGameStore.setState({
-                lastDiceResult: { die1, die2, total, isDoubles: die1 === die2 },
-            });
-
-            pendingResult.current = { playerId: player.id, total: steps };
-            prevDiceResult.current = currentResult;
-            prevPosition.current = currentPos;
+        // Validate: dice must be 1-6. If [0,0], VRF callback hasn't fired yet — skip.
+        if (die1 < 1 || die1 > 6 || die2 < 1 || die2 > 6) {
+            console.log(`[VRF] ⏳ Dice values invalid (${die1}, ${die2}) — VRF callback not yet resolved, waiting...`);
+            return;
         }
-    }, [isBeginnerMode, currentPlayerState, getCurrentPlayer]);
+
+        // Check if lastRollTimestamp changed from what we stored at VRF request time.
+        // The on-chain callback always sets last_roll_timestamp = clock.unix_timestamp,
+        // so this is guaranteed to change even if the dice happen to be the same values.
+        if (newTs === prevRollTimestamp.current) {
+            console.log(`[VRF] ⏳ Roll timestamp unchanged (${newTs}) — stale data, still waiting for VRF callback...`);
+            return;
+        }
+
+        // Accept this as the VRF result
+        vrfRequested.current = false;
+        prevRollTimestamp.current = null;
+
+        let steps: number;
+        if (newPos >= oldPos) {
+            steps = newPos - oldPos;
+        } else {
+            steps = (BOARD_SIZE - oldPos) + newPos;
+        }
+
+        console.log(`[VRF] ✅ VRF result accepted: die1=${die1}, die2=${die2}, total=${total}, steps=${steps}`);
+
+        const player = getCurrentPlayer();
+        useGameStore.setState({
+            lastDiceResult: { die1, die2, total, isDoubles: die1 === die2 },
+        });
+
+        pendingResult.current = { playerId: player.id, total: steps };
+        prevPosition.current = newPos;
+
+        // Reset settled flag BEFORE triggering animation to prevent
+        // the 'watch for settle' effect from firing prematurely on mobile
+        setDiceSettled(false);
+        setPhase('rolling');
+        setDiceAnimating(true);
+    }, [isBeginnerMode, currentPlayerState, getCurrentPlayer, setDiceAnimating, setDiceSettled]);
 
     // ─── Watch for dice to settle ────────────────────────────
     useEffect(() => {
@@ -226,10 +284,6 @@ export function useDiceRoll() {
     ]);
 
     // ─── Async landing handler (explore + beginner) ──────────
-    // Uses predictTileAction() to show instant results with confetti.
-    // Event/corner tiles: show EventCard popup for user to read + dismiss.
-    // Choice tiles: show TileActionPopup for user decision.
-    // Auto-resolved tiles: apply immediately with confetti.
     const handleAsyncLanding = useCallback((
         tileIndex: number,
         playerId: string,
@@ -318,7 +372,7 @@ export function useDiceRoll() {
                 return;
             }
 
-            // Graveyard — show custom custom text
+            // Graveyard — show custom text
             if (cornerType === 'graveyard') {
                 const customResult: TileActionResult = {
                     ...result,
@@ -371,7 +425,6 @@ export function useDiceRoll() {
         }
 
         // ─── Truly neutral tiles: no popup, just end turn ───
-        // Beginner mode only: fire on-chain performTileAction in background
         if (gameState.isBeginnerMode) {
             fireOnChainTileAction(tileIndex, false);
         }
@@ -380,7 +433,6 @@ export function useDiceRoll() {
     }, [showPopup, showEventCard, showCoinEffect, movePlayer, setPhase]);
 
     // ─── Auto-apply tile result without popup ────────────────
-    // Used for already-seen tiles and rent.
     const autoApplyResult = useCallback((
         playerId: string,
         result: TileActionResult,
@@ -414,14 +466,25 @@ export function useDiceRoll() {
     }, [showCoinEffect, setPhase]);
 
     // ─── Fire on-chain tile action (beginner mode only) ──────
+    // Uses direct gameActions call when available, falls back to custom event.
     const fireOnChainTileAction = useCallback((tileIndex: number, chooseAction: boolean) => {
-        setTimeout(() => {
-            const event = new CustomEvent('solvestor:performTileAction', {
-                detail: { tileIndex, chooseAction },
+        if (gameActions?.isReady) {
+            // Direct call — no custom event needed
+            console.log(`[TileAction] 🔗 Calling performTileAction directly: tile=${tileIndex}, choose=${chooseAction}`);
+            gameActions.performTileAction(tileIndex, chooseAction).catch((err) => {
+                console.error('[TileAction] performTileAction failed:', err);
             });
-            window.dispatchEvent(event);
-        }, 100);
-    }, []);
+        } else {
+            // Fallback to custom event (GamePage listener will handle)
+            console.log(`[TileAction] 📡 Dispatching performTileAction event: tile=${tileIndex}, choose=${chooseAction}`);
+            setTimeout(() => {
+                const event = new CustomEvent('solvestor:performTileAction', {
+                    detail: { tileIndex, chooseAction },
+                });
+                window.dispatchEvent(event);
+            }, 100);
+        }
+    }, [gameActions]);
 
-    return { performRoll, isWaitingForVRF: isWaitingVRF.current, fireOnChainTileAction };
+    return { performRoll, isWaitingForVRF: vrfRequested.current, fireOnChainTileAction };
 }

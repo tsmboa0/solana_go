@@ -9,7 +9,7 @@ use instructions::*;
 
 use ephemeral_rollups_sdk::anchor::ephemeral;
 
-declare_id!("HqicBmtY4WMbEVq2ZeLuWCUUr6VTTmfkJ6RGjFn3GLBo");
+declare_id!("CGpK4bRB6DybtWXiTTHXaeoY8RGTCz3cPyHZShaboY23");
 
 #[ephemeral]
 #[program]
