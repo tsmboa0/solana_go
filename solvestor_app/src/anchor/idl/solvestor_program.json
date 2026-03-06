@@ -229,6 +229,10 @@
         {
           "name": "max_players",
           "type": "u8"
+        },
+        {
+          "name": "max_go_count",
+          "type": "u16"
         }
       ]
     },
@@ -666,6 +670,31 @@
               }
             ]
           }
+        },
+        {
+          "name": "escrow",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "game"
+              }
+            ]
+          }
+        },
+        {
+          "name": "program_id"
         },
         {
           "name": "magic_program",
@@ -1193,6 +1222,57 @@
       ]
     },
     {
+      "name": "settle_game_action",
+      "docs": [
+        "MagicAction handler — triggered automatically by end_game commit"
+      ],
+      "discriminator": [
+        160,
+        249,
+        189,
+        56,
+        36,
+        155,
+        189,
+        178
+      ],
+      "accounts": [
+        {
+          "name": "game",
+          "docs": [
+            "Data has been committed (Finalize ran before CallHandler).",
+            "We manually deserialize and validate in the handler."
+          ],
+          "writable": true
+        },
+        {
+          "name": "escrow",
+          "writable": true
+        },
+        {
+          "name": "winner",
+          "writable": true
+        },
+        {
+          "name": "house_account",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "escrow_auth"
+        }
+      ],
+      "args": [
+        {
+          "name": "game_id",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "start_game",
       "discriminator": [
         249,
@@ -1359,7 +1439,7 @@
     {
       "code": 6014,
       "name": "CannotEndGameYet",
-      "msg": "Game requires go_count >= 20 to end"
+      "msg": "Game requires go_count >= max_go_count to end"
     },
     {
       "code": 6015,
@@ -1404,7 +1484,7 @@
     {
       "code": 6023,
       "name": "NoEligibleWinner",
-      "msg": "No eligible winner found (need go_passes >= 15)"
+      "msg": "No eligible winner found (need go_passes >= half of MIN_GO_COUNT_TO_END)"
     },
     {
       "code": 6024,
@@ -1531,6 +1611,10 @@
             "type": "pubkey"
           },
           {
+            "name": "escrow_bump",
+            "type": "u8"
+          },
+          {
             "name": "is_ended",
             "type": "bool"
           },
@@ -1540,6 +1624,10 @@
           },
           {
             "name": "go_count",
+            "type": "u16"
+          },
+          {
+            "name": "max_go_count",
             "type": "u16"
           },
           {

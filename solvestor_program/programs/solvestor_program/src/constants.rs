@@ -12,6 +12,11 @@ pub const DEFI_LANDING_FEE: u64 = 20; // fee if NOT staked
 pub const SHIELD_COST: u64 = 200;
 pub const MEV_PENALTY_BPS: u64 = 1000;    // 10% in basis points
 pub const HOUSE_FEE_BPS: u64 = 500;       // 5% in basis points
+// ─── Wealth Formula (end_game winner calculation) ────────────
+pub const WEALTH_WEIGHT: u64 = 70;         // 70% from cash + assets
+pub const GO_WEIGHT: u64 = 30;             // 30% from Go passes
+pub const WEALTH_NORM: u64 = 10_000;       // Normalisation factor for Go score
+pub const MAX_EXPECTED_GO: u64 = 100;      // Ceiling for Go normalisation
 pub const POTION_COST: u64 = 500;         // BioDAO resurrection potion
 pub const GRAVEYARD_PENALTY_BPS: u64 = 4000; // 40% penalty when trapped
 pub const SCHOOL_BONUS: u64 = 50;         // landing on Turbine/Blueshift

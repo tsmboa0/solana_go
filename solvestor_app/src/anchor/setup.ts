@@ -146,3 +146,18 @@ export function lamportsToSol(lamports: number | bigint): number {
 export function solToLamports(sol: number): number {
     return Math.round(sol * 1_000_000_000);
 }
+
+// ─── MagicAction Escrow ──────────────────────────────────────
+
+import {
+    escrowPdaFromEscrowAuthority,
+    createTopUpEscrowInstruction,
+    createCloseEscrowInstruction,
+} from '@magicblock-labs/ephemeral-rollups-sdk';
+
+/** Derive the MagicAction escrow PDA for a given authority (payer) */
+export function deriveMagicActionEscrowPDA(authority: PublicKey): PublicKey {
+    return escrowPdaFromEscrowAuthority(authority);
+}
+
+export { createTopUpEscrowInstruction, createCloseEscrowInstruction };

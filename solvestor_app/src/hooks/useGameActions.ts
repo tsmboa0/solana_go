@@ -8,7 +8,7 @@
 // ============================================================
 
 import { useCallback } from 'react';
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey, Transaction } from '@solana/web3.js';
 import { useAnchorWallet } from '@solana/wallet-adapter-react';
 import type { SessionKeyState } from '@/hooks/useSessionKey';
 import {
@@ -17,6 +17,10 @@ import {
     getProgram,
     getERProgram,
     derivePlayerPDA,
+    deriveEscrowPDA,
+    deriveMagicActionEscrowPDA,
+    createCloseEscrowInstruction,
+    PROGRAM_ID,
 } from '@/anchor/setup';
 // NOTE: Gameplay actions (rollDice, buyProperty, performTileAction) use the ER program
 // because all accounts are delegated to the ephemeral rollup.
@@ -31,7 +35,7 @@ export interface GameActions {
     buyProperty: (tileIndex: number) => Promise<string | null>;
     /** Perform tile action (landing effect) — runs on ER with session key */
     performTileAction: (tileIndex: number, chooseAction: boolean, ownerPDA?: PublicKey) => Promise<string | null>;
-    /** End game — runs on ER, commits + undelegates back to L1 */
+    /** End game — runs on ER, commits + settles via MagicAction on L1 */
     endGame: () => Promise<string | null>;
     /** Manually fetch current player state from PDA (backup to subscription) */
     fetchPlayerState: () => Promise<OnChainPlayerState | null>;
@@ -191,8 +195,9 @@ export function useGameActions(session: SessionKeyState): GameActions {
     }, [wallet, session, currentGamePDA]);
 
     // ─── End Game ────────────────────────────────────────────
-    // Runs on ER — commits + undelegates GameState to L1
-    // This is called by the wallet (not session key)
+    // Runs on ER — commits GameState + triggers settle_game_action
+    // on L1 via MagicAction (atomic: end + settle in one call).
+    // This is called by the wallet (not session key).
     const endGame = useCallback(async (): Promise<string | null> => {
         if (!wallet || !currentGamePDA || !currentGameId) {
             console.error('[GameActions] Not ready for endGame');
@@ -215,15 +220,20 @@ export function useGameActions(session: SessionKeyState): GameActions {
                     return {
                         pubkey: playerPDA,
                         isSigner: false,
-                        isWritable: true,
+                        isWritable: false,
                     };
                 });
+
+            // Derive escrow PDA — passed from frontend to save compute, validated by seeds on-chain
+            const [escrowPDA] = deriveEscrowPDA(currentGamePDA);
 
             const tx = await program.methods
                 .endGame(currentGameId)
                 .accountsPartial({
                     user: wallet.publicKey,
                     game: currentGamePDA,
+                    escrow: escrowPDA,
+                    programId: PROGRAM_ID,
                 })
                 .remainingAccounts(remainingAccounts)
                 .transaction();
@@ -239,7 +249,29 @@ export function useGameActions(session: SessionKeyState): GameActions {
             );
             await erConnection.confirmTransaction(signature, 'confirmed');
 
-            console.log('[GameActions] endGame confirmed:', signature);
+            console.log('[GameActions] ✅ endGame confirmed (MagicAction will trigger settle on L1):', signature);
+
+            // Clean up MagicAction escrow after settlement
+            try {
+                const magicEscrowPDA = deriveMagicActionEscrowPDA(wallet.publicKey);
+                const closeEscrowIx = createCloseEscrowInstruction(
+                    magicEscrowPDA,
+                    wallet.publicKey,
+                );
+                const closeTx = new Transaction().add(closeEscrowIx);
+                closeTx.feePayer = wallet.publicKey;
+                closeTx.recentBlockhash = (await l1Connection.getLatestBlockhash()).blockhash;
+                const signedCloseTx = await wallet.signTransaction(closeTx);
+                const closeSig = await l1Connection.sendRawTransaction(
+                    signedCloseTx.serialize(),
+                    { skipPreflight: true }
+                );
+                await l1Connection.confirmTransaction(closeSig, 'confirmed');
+                console.log('[GameActions] ✅ MagicAction escrow closed:', closeSig);
+            } catch (cleanupErr: any) {
+                console.warn('[GameActions] ⚠ MagicAction escrow cleanup failed (non-critical):', cleanupErr.message);
+            }
+
             return signature;
         } catch (err: any) {
             console.error('[GameActions] endGame failed:', err);
@@ -293,3 +325,4 @@ export function useGameActions(session: SessionKeyState): GameActions {
         isReady,
     };
 }
+

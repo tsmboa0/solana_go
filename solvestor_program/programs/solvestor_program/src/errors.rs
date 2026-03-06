@@ -30,7 +30,7 @@ pub enum GameErrorCode {
     Unauthorized,
     #[msg("Invalid tile index (must be 0-39)")]
     InvalidTileIndex,
-    #[msg("Game requires go_count >= 20 to end")]
+    #[msg("Game requires go_count >= max_go_count to end")]
     CannotEndGameYet,
     #[msg("Property is not ownable")]
     NotOwnable,
@@ -48,7 +48,7 @@ pub enum GameErrorCode {
     NotEnoughPlayers,
     #[msg("Only the game creator can start the game")]
     NotCreator,
-    #[msg("No eligible winner found (need go_passes >= 15)")]
+    #[msg("No eligible winner found (need go_passes >= half of MIN_GO_COUNT_TO_END)")]
     NoEligibleWinner,
     #[msg("Player cannot afford the shield")]
     CannotAffordShield,

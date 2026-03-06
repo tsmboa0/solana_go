@@ -30,11 +30,15 @@ pub struct GameState {
     // Game lifecycle
     pub escrow_pda: Pubkey,
     pub authority: Pubkey,
+    pub escrow_bump: u8,
     pub is_ended: bool,
     pub is_started: bool,
     // Tracks the highest go_passes among all active players.
-    // Game can end when go_count >= 20.
+    // Game can end when go_count >= max_go_count.
     pub go_count: u16,
+    // Configurable per-game: how many Go passes before the game can end.
+    // Set by creator at room creation. Frontend default = 20.
+    pub max_go_count: u16,
     pub winner: Option<Pubkey>,
     pub created_at: i64,
 }
@@ -54,9 +58,11 @@ impl GameState {
         + 40                      // property_upgrade_levels
         + 32                      // escrow_pda
         + 32                      // authority
+        + 1                       // escrow_bump
         + 1                       // is_ended
         + 1                       // is_started
         + 2                       // go_count
+        + 2                       // max_go_count
         + 33                      // winner (Option<Pubkey>)
         + 8;                      // created_at
 }

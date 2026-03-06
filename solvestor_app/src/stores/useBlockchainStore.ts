@@ -25,6 +25,8 @@ import {
     getValidatorRemainingAccounts,
     shortenPubkey,
     PROGRAM_ID,
+    deriveMagicActionEscrowPDA,
+    createTopUpEscrowInstruction,
 } from '@/anchor/setup';
 import { useGameStore } from '@/stores/useGameStore';
 import { deriveTempKeypair } from '@/hooks/useSessionKey';
@@ -51,6 +53,8 @@ export interface OnChainGame {
     isStarted: boolean;
     /** Whether the game has ended */
     isEnded: boolean;
+    /** Max Go passes before game can end */
+    maxGoCount: number;
     /** Timestamp of creation */
     createdAt: number;
     /** Shortened creator address for display */
@@ -74,9 +78,11 @@ export interface OnChainGameState {
     propertyUpgradeLevels: number[];
     escrowPda: PublicKey;
     authority: PublicKey;
+    escrowBump: number;
     isEnded: boolean;
     isStarted: boolean;
     goCount: number;
+    maxGoCount: number;
     winner: PublicKey | null;
     createdAt: BN;
 }
@@ -154,6 +160,7 @@ interface BlockchainState {
             roundDuration: number;
             startCapital: number;
             stakeAmount: number;
+            maxGoCount?: number; // defaults to 20
         },
         sessionParams?: SessionParams
     ) => Promise<{ gamePDA: PublicKey; gameId: BN } | null>;
@@ -244,6 +251,7 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
                             : Number(data.startCapital),
                         isStarted: data.isStarted,
                         isEnded: data.isEnded,
+                        maxGoCount: data.maxGoCount ?? 20,
                         createdAt: typeof data.createdAt.toNumber === 'function'
                             ? data.createdAt.toNumber()
                             : Number(data.createdAt),
@@ -306,7 +314,8 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
                     new BN(config.roundDuration),
                     new BN(config.startCapital),
                     new BN(config.stakeAmount),
-                    config.maxPlayers
+                    config.maxPlayers,
+                    config.maxGoCount ?? 20
                 )
                 .accounts({
                     creator: wallet.publicKey,
@@ -328,7 +337,16 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
                 .remainingAccounts(getValidatorRemainingAccounts())
                 .instruction();
 
-            const delegateTx = new Transaction().add(delegatePlayerIx);
+            // MagicAction escrow top-up (for settle_game L1 fees after end_game)
+            const magicEscrowPDA = deriveMagicActionEscrowPDA(wallet.publicKey);
+            const topUpEscrowIx = createTopUpEscrowInstruction(
+                magicEscrowPDA,
+                wallet.publicKey,
+                wallet.publicKey,
+                10_000, // lamports for L1 action fees
+            );
+
+            const delegateTx = new Transaction().add(topUpEscrowIx, delegatePlayerIx);
 
             console.log('[CreateRoom Step2] delegate_player ix built ✓');
             console.log('[CreateRoom Step2] delegate_player ix programId:', delegatePlayerIx.programId.toBase58());
@@ -498,6 +516,16 @@ export const useBlockchainStore = create<BlockchainState>()((set, get) => ({
                 .remainingAccounts(getValidatorRemainingAccounts())
                 .instruction();
             delegateTx.add(delegatePlayerIx);
+
+            // MagicAction escrow top-up (for settle_game L1 fees after end_game)
+            const magicEscrowPDA = deriveMagicActionEscrowPDA(wallet.publicKey);
+            const topUpEscrowIx = createTopUpEscrowInstruction(
+                magicEscrowPDA,
+                wallet.publicKey,
+                wallet.publicKey,
+                10_000, // lamports for L1 action fees
+            );
+            delegateTx.add(topUpEscrowIx);
 
             // Append session creation instructions if provided
             if (sessionParams) {

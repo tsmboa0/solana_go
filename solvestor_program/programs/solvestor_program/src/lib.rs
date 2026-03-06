@@ -25,8 +25,9 @@ pub mod solvestor_program {
         start_capital: u64,
         stake_amount: u64,
         max_players: u8,
+        max_go_count: u16,
     ) -> Result<()> {
-        instructions::create_room::create_room(ctx, game_id, round_duration, start_capital, stake_amount, max_players)
+        instructions::create_room::create_room(ctx, game_id, round_duration, start_capital, stake_amount, max_players, max_go_count)
     }
 
     pub fn start_game(ctx: Context<StartGame>, game_id: u64) -> Result<()> {
@@ -83,5 +84,10 @@ pub mod solvestor_program {
     /// Runs on L1 — transfers escrow funds (95% winner, 5% house fee)
     pub fn settle_game(ctx: Context<SettleGame>, game_id: u64) -> Result<()> {
         instructions::settle_game::settle_game(ctx, game_id)
+    }
+
+    /// MagicAction handler — triggered automatically by end_game commit
+    pub fn settle_game_action(ctx: Context<SettleGameAction>, game_id: u64) -> Result<()> {
+        instructions::settle_game::settle_game_action(ctx, game_id)
     }
 }
