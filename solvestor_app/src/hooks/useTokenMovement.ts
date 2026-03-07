@@ -12,6 +12,7 @@ import { useGameStore } from '@/stores/useGameStore';
 import { soundManager } from '@/utils/SoundManager';
 import { useCoinConfetti } from '@/hooks/useCoinConfetti';
 import { GO_BONUS } from '@/config/onChainConstants';
+import { requestHaptic, isMobileNative } from '@/utils/mobileBridge';
 import type { Vector3Tuple } from 'three';
 
 interface TokenMovementState {
@@ -111,8 +112,10 @@ export function useTokenMovement(
                     setTimeout(() => {
                         if (isFinalStep) {
                             soundManager.play('pay-rent');
+                            if (isMobileNative()) requestHaptic('medium');
                         } else if (tileIndex === 0) {
                             soundManager.play('go-sound');
+                            if (isMobileNative()) requestHaptic('success');
                             // Show green confetti for passing GO
                             useCoinConfetti.getState().showCoinEffect(
                                 GO_BONUS,

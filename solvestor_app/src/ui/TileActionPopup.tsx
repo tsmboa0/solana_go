@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import type { TileActionConfig } from '@/types/game';
 import { predictTileAction, type PlayerLocalState } from '@/engine/tileActionMirror';
+import { requestHaptic, isMobileNative } from '@/utils/mobileBridge';
 
 // Helper to evaluate string conditions securely using a limited scope context
 function evaluateCondition(condition: string, context: any): boolean {
@@ -416,6 +417,7 @@ export function TileActionPopup() {
                                 const onClick = async () => {
                                     if (isChoice && choiceMeta && popupTileId !== null) {
                                         // Choice action — deduct cost + show confetti
+                                        if (isMobileNative()) requestHaptic('medium');
                                         showCoinEffect(choiceMeta.cost, 'debit', `${action.label}`);
 
                                         // Deduct cost from balance
@@ -448,6 +450,7 @@ export function TileActionPopup() {
                                         skipAction();
                                     } else if (action.id === 'skip_choice' && popupTileId !== null) {
                                         // Skip choice — apply fee if applicable
+                                        if (isMobileNative()) requestHaptic('light');
                                         const skipFee = (action as any)._skipFee || 0;
                                         if (skipFee > 0) {
                                             showCoinEffect(skipFee, 'debit', `Skipped — paid ${skipFee} fee`);
@@ -471,6 +474,7 @@ export function TileActionPopup() {
 
                                         skipAction();
                                     } else if (action.action_type === 'pay_rent') {
+                                        if (isMobileNative()) requestHaptic('medium');
                                         executeRent(popupTileId!);
                                     } else if (action.action_type === 'pay_tax') {
                                         skipAction();
@@ -481,6 +485,7 @@ export function TileActionPopup() {
                                             console.log(`[TileActionPopup] 🏠 Buying property on-chain: tile=${popupTileId}`);
                                             const sig = await gameActionsCtx.actions.buyProperty(popupTileId!);
                                             if (sig) {
+                                                if (isMobileNative()) requestHaptic('success');
                                                 console.log(`[TileActionPopup] ✅ Buy confirmed: ${sig}`);
                                                 // Apply local state after on-chain confirmation
                                                 executeBuy(popupTileId!);

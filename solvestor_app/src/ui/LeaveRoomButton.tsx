@@ -11,6 +11,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAnchorWallet } from '@solana/wallet-adapter-react';
 import { useGameStore } from '@/stores/useGameStore';
 import { useBlockchainStore } from '@/stores/useBlockchainStore';
+import { isMobileNative, requestNavigateBack, requestHaptic } from '@/utils/mobileBridge';
 
 export function LeaveRoomButton() {
     const navigate = useNavigate();
@@ -24,6 +25,10 @@ export function LeaveRoomButton() {
     const [showConfirm, setShowConfirm] = useState(false);
 
     const isBeginner = mode === 'beginner';
+    const isNative = isMobileNative();
+
+    // In native WebView, the leave button is handled by the native UI
+    if (isNative) return null;
 
     const handleLeave = async () => {
         if (isBeginner && wallet) {
@@ -31,14 +36,24 @@ export function LeaveRoomButton() {
             const success = await leaveRoom(wallet);
             if (success) {
                 leaveGame();
-                navigate('/lobby');
+                if (isNative) {
+                    requestHaptic('success');
+                    requestNavigateBack();
+                } else {
+                    navigate('/lobby');
+                }
             }
         } else {
             // Explore mode — local only
             leaveGame();
             clearCurrentGame();
-            navigate('/select');
-            window.location.reload();
+            if (isNative) {
+                requestHaptic('light');
+                requestNavigateBack();
+            } else {
+                navigate('/select');
+                window.location.reload();
+            }
         }
     };
 

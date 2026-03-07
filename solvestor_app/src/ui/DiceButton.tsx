@@ -13,6 +13,7 @@ import { useUIStore } from '@/stores/useUIStore';
 import { useDiceRoll } from '@/hooks/useDiceRoll';
 import { useGameActionsContext } from '@/pages/GamePage';
 import { soundManager } from '@/utils/SoundManager';
+import { requestHaptic, isMobileNative } from '@/utils/mobileBridge';
 
 const VRF_TIMEOUT_MS = 30_000; // 30 seconds max wait for VRF
 
@@ -103,6 +104,7 @@ export function DiceButton() {
 
     const handleRollClick = async () => {
         if (!canRoll || isPendingVRF) return;
+        if (isMobileNative()) requestHaptic('heavy');
         await soundManager.init();
         soundManager.playBGM();
         if (isAsyncMode) startCooldown();
@@ -128,6 +130,7 @@ export function DiceButton() {
                 if (txSig) {
                     console.log('[DiceButton] ✅ VRF request tx confirmed:', txSig);
                     console.log('[DiceButton] ⏳ Waiting for VRF callback via subscription/polling...');
+                    if (isMobileNative()) requestHaptic('success');
                     // NOTE: We do NOT manually fetch player state here.
                     // The VRF *request* tx confirms before the VRF *callback* fires.
                     // Fetching here would read stale dice values and poison the VRF detection.
@@ -143,6 +146,7 @@ export function DiceButton() {
                 }
             } catch (err) {
                 console.error('[DiceButton] On-chain rollDice failed:', err);
+                if (isMobileNative()) requestHaptic('error');
                 setIsPendingVRF(false);
                 useGameStore.getState().setPhase('waiting');
                 if (vrfTimeoutRef.current) {

@@ -23,6 +23,15 @@ import { GamePage } from '@/pages/GamePage';
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { connected, wallet, connecting } = useWallet();
 
+  // When running inside the native mobile WebView, the wallet is managed
+  // by the native app — bypass the browser wallet check.
+  // The __SOLVESTOR_NATIVE__ flag is injected by our bridge JS before content
+  // loads (injectedJavaScriptBeforeContentLoaded), so it can't be set by
+  // regular web visitors.
+  if ((window as any).__SOLVESTOR_NATIVE__) {
+    return <>{children}</>;
+  }
+
   // Wallet adapter is still auto-reconnecting — don't redirect yet
   if (!connected && (connecting || wallet)) {
     return null;

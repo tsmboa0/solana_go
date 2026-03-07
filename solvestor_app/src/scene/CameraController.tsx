@@ -37,9 +37,16 @@ import {
     CAMERA_DAMPING_FACTOR,
 } from '@/config/game';
 import { TILE_LAYOUTS } from '@/utils/boardLayout';
+import { isMobileNative } from '@/utils/mobileBridge';
 
 // ─── Overview: bird's-eye position showing most of the board ───
-const OVERVIEW_POSITION = new THREE.Vector3(...CAMERA_START_POSITION);
+// On mobile, push the Z axis further back so the full board is visible
+const MOBILE_Z_EXTRA = isMobileNative() ? 1.0 : 0;
+const OVERVIEW_POSITION = new THREE.Vector3(
+    CAMERA_START_POSITION[0],
+    CAMERA_START_POSITION[1] + MOBILE_Z_EXTRA,
+    CAMERA_START_POSITION[2]
+);
 const BOARD_CENTER = new THREE.Vector3(...CAMERA_START_TARGET);
 
 // ─── Zoom-on-land: closer offset from the tile ───
@@ -296,23 +303,8 @@ export function CameraController() {
         return () => { _recenterFn = null; };
     }, [recenter]);
 
-    // ─── DEBUG: Log camera values every 1s for manual tuning ───
-    const lastLogTime = useRef(0);
-
     // ─── Smooth interpolation each frame (only in follow mode) ───
     useFrame((_, delta) => {
-        // Debug logging (throttled to every 1 second)
-        const now = Date.now();
-        if (now - lastLogTime.current > 1000) {
-            lastLogTime.current = now;
-            const p = camera.position;
-            const t = controlsRef.current?.target;
-            console.log(
-                `📷 Camera: [${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}]` +
-                (t ? `  |  🎯 Target: [${t.x.toFixed(2)}, ${t.y.toFixed(2)}, ${t.z.toFixed(2)}]` : '')
-            );
-        }
-
         if (!isFollowing.current || isCameraDetached) return;
 
         // --- Delta-Time Independent Lerping ---

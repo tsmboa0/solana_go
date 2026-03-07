@@ -13,6 +13,8 @@ import { useAnchorWallet } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
 import { BN } from '@coral-xyz/anchor';
 import { AnimatePresence } from 'framer-motion';
+import { signalGameReady, isMobileNative, onNativeMessage, requestNavigateBack } from '@/utils/mobileBridge';
+import { recenterCamera } from '@/scene/CameraController';
 
 import { GameScene } from '@/scene/GameScene';
 import { HUD } from '@/ui/HUD';
@@ -67,6 +69,8 @@ export function GamePage() {
     const setupBeginnerMode = useGameStore((s) => s.setupBeginnerMode);
     const isBeginnerMode = useGameStore((s) => s.isBeginnerMode);
     const resetGame = useGameStore((s) => s.resetGame);
+    const leaveGame = useGameStore((s) => s.leaveGame);
+    const clearCurrentGame = useBlockchainStore((s) => s.clearCurrentGame);
 
     // Blockchain store state
     const currentGamePDA = useBlockchainStore((s) => s.currentGamePDA);
@@ -121,10 +125,36 @@ export function GamePage() {
     useEffect(() => {
         if (isExplore) {
             setupExploreMode();
+            // Signal native app that the game is ready
+            if (isMobileNative()) signalGameReady();
         } else if (!isBeginner) {
             resetGame();
         }
     }, [mode, isExplore, isBeginner, setupExploreMode, resetGame]);
+
+    // ─── Mobile bridge: expose recenter + handle native events ───
+    useEffect(() => {
+        if (!isMobileNative()) return;
+
+        // Expose recenterCamera on window for native JS injection
+        (window as any).__recenterCamera = recenterCamera;
+
+        // Listen for native events (LEAVE_GAME, RECENTER_CAMERA)
+        const cleanup = onNativeMessage((msg) => {
+            if (msg.type === 'RECENTER_CAMERA') {
+                recenterCamera();
+            } else if (msg.type === 'LEAVE_GAME') {
+                leaveGame();
+                clearCurrentGame();
+                requestNavigateBack();
+            }
+        });
+
+        return () => {
+            delete (window as any).__recenterCamera;
+            cleanup();
+        };
+    }, [leaveGame, clearCurrentGame]);
 
     // Activate CPU player logic (only runs when isExploreMode is true)
     useCPUPlayer();
@@ -237,42 +267,19 @@ export function GamePage() {
 
                 // Fetch player state from ER
                 const playerState = await (erProgram.account as any).playerState.fetch(playerPDA);
-                const balance = typeof playerState.balance === 'object' && 'toNumber' in playerState.balance
-                    ? playerState.balance.toNumber()
-                    : Number(playerState.balance);
 
-                console.log('[Poll] 📊 ER Player State:', {
-                    dice: `[${playerState.lastDiceResult[0]}, ${playerState.lastDiceResult[1]}]`,
-                    position: playerState.currentPosition,
-                    balance,
-                    goCount: playerState.goCount,
-                    hasShield: playerState.hasShield,
-                    isInGraveyard: playerState.isInGraveyard,
-                });
-
-                // Also update the store with fresh ER data
+                // Update the store with fresh ER data
                 useBlockchainStore.setState({
                     currentPlayerState: playerState,
-                    playerStateSource: 'poll' as any, // distinct from 'subscription' for debugging
-                });
-
-                // Fetch game state from ER
-                const gameState = await (erProgram.account as any).gameState.fetch(currentGamePDA);
-                console.log('[Poll] 📊 ER Game State:', {
-                    isStarted: gameState.isStarted,
-                    isEnded: gameState.isEnded,
-                    playerCount: gameState.playerCount,
-                    turnCount: gameState.turnCount,
+                    playerStateSource: 'poll' as any,
                 });
             } catch (err) {
                 console.warn('[Poll] ER poll failed:', err);
             }
         }, 15000);
 
-        console.log('[Poll] ✅ Started 15s polling for ER game + player state');
         return () => {
             clearInterval(pollInterval);
-            console.log('[Poll] ⏹ Stopped ER polling');
         };
     }, [isBeginner, wallet, currentGamePDA]);
 
